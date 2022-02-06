@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
-// @namespace    BookWalker Scripts
+// @namespace    https://github.com/RolerGames/UserScripts
 // @version      0.1
 // @description  Select BookWalker covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
