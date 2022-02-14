@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.1
+// @version      0.2
 // @description  Select BookWalker covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/series/*/list/*
@@ -25,11 +25,11 @@
         bookwalkerCoverDownloader(
             'data-original',
             $('.o-contents-section__title').text(),
-            $('.o-contents-section__body').first(),
-            `<button id="cover-download-as-jpeg" class="a-basic-btn--secondary bookwalker-downloader cover-download-button"></button>
+            $('.o-contents-section__body').first(), `
+            <button id="cover-download-as-jpeg" class="a-basic-btn--secondary bookwalker-downloader cover-download-button"></button>
             <button id="cover-download-as-zip" class="a-basic-btn--secondary bookwalker-downloader cover-download-button"></button>
             <button id="cover-select-all" class="a-basic-btn--secondary bookwalker-downloader cover-download-button"></button>
-            `,`
+            `, `
             button.bookwalker-downloader.cover-download-button {
                 margin: 10px;
                 display: inline-block;
@@ -39,11 +39,11 @@
         bookwalkerCoverDownloader(
             'data-srcset',
             $('.title-main-inner').text().split('\n                            ')[1],
-            $('.o-tile-list').first(),
-            `<p id="cover-download-as-jpeg" class="btn-cart-add btn-box m-b40 bookwalker-downloader cover-download-button"></p>
+            $('.o-tile-list').first(), `
+            <p id="cover-download-as-jpeg" class="btn-cart-add btn-box m-b40 bookwalker-downloader cover-download-button"></p>
             <p id="cover-download-as-zip" class="btn-cart-add btn-box m-b40 bookwalker-downloader cover-download-button"></p>
             <p id="cover-select-all" class="btn-cart-add btn-box m-b40 bookwalker-downloader cover-download-button"></p>
-            `,`
+            `, `
             p.bookwalker-downloader.cover-download-button {
                 cursor: pointer; 
                 display: inline-block;
@@ -112,32 +112,46 @@
                     }
 
                     function getBestQualityCovers() {
-                        function onloadAJAX(rspObj) {
-                            if (rspObj.status !== 200 || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
-                                displayError(rspObj.status + ' ' + rspObj.statusText + ' ' + rspObj.finalUrl);
-                            }
-                            coverUrls[rspObj.finalUrl] = window.URL.createObjectURL(rspObj.response);
-                            coverDownloadProgress(Object.keys(coverUrls).length / selectedCovers.length * 100, 'Downloading covers...');
-                        }
-                        function reportAJAX_Error(rspObj) {
-                            displayError(rspObj.status + ' ' + rspObj.statusText + ' ' + rspObj.finalUrl);
-                        }
-                        selectedCovers.each(function () {
+                        const maxRetry403Count = 32;
+                        let retry403Count = {};
+
+                        function getAJAX(url, title) {
                             GM_xmlhttpRequest({
                                 method: 'GET',
-                                url: 'https://c.bookwalker.jp/coverImage_' + (parseInt($(this).attr(dataLink).split('/')[3].split('').reverse().join('')) - 1) + '.jpg',
+                                url: url,
                                 responseType: 'blob',
                                 onload: onloadAJAX,
                                 onabort: reportAJAX_Error,
                                 onerror: reportAJAX_Error,
                                 ontimeout: reportAJAX_Error
                             });
+                            function onloadAJAX(rspObj) {
+                                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403Count[title] >= maxRetry403Count || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
+                                    displayError(rspObj.status + ' ' + rspObj.statusText + ' ' + title + ' ' + rspObj.finalUrl);
+                                }
+                                if (rspObj.status === 403 && retry403Count[title] < maxRetry403Count) {
+                                    getAJAX('https://c.bookwalker.jp/coverImage_' + (parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, "") - 1) + '.jpg'), title);
+                                    retry403Count[title] = retry403Count[title] + 1;
+                                } else {
+                                    coverUrls[title] = window.URL.createObjectURL(rspObj.response);
+                                }
+                                coverDownloadProgress(Object.keys(coverUrls).length / selectedCovers.length * 100, 'Downloading covers...');
+                            }
+                            function reportAJAX_Error(rspObj) {
+                                displayError(rspObj.status + ' ' + rspObj.statusText + ' ' + title + ' ' + rspObj.finalUrl);
+                            }
+                        }
+
+                        selectedCovers.each(function () {
+                            retry403Count[$(this).attr('title')] = 0;
+
+                            getAJAX('https://c.bookwalker.jp/coverImage_' + (parseInt($(this).attr(dataLink).split('/')[3].split('').reverse().join('')) - 1) + '.jpg', $(this).attr('title'));
                         });
                     }
 
                     function downloadCoversAsJPEG() {
                         selectedCovers.each(function() {
-                            saveAs(coverUrls['https://c.bookwalker.jp/coverImage_' + (parseInt($(this).attr(dataLink).split('/')[3].split('').reverse().join('')) - 1) + '.jpg'], $(this).attr('title').replace(saveAsNameRegex, '') + '.jpg'
+                            saveAs(coverUrls[$(this).attr('title')], $(this).attr('title').replace(saveAsNameRegex, '') + '.jpg'
                             );
                         });
                     }
@@ -147,7 +161,7 @@
                             JSZipUtils.getBinaryContent(url, function (err, config) {
                                 if (err) {
                                     reject(err);
-                                    displayError(err.replace('Error: ', '') + ' ' + url);
+                                    displayError(err + ' ' + url);
                                 } else {
                                     resolve(config);
                                 }
@@ -157,7 +171,7 @@
                     function downloadCoversAsZIP() {
                         const zip = new JSZip();
                         selectedCovers.each(function() {
-                            zip.file($(this).attr('title').replace(saveAsNameRegex, '') + '.jpg', urlToPromise(coverUrls['https://c.bookwalker.jp/coverImage_' + (parseInt($(this).attr(dataLink).split('/')[3].split('').reverse().join('')) - 1) + '.jpg']), {binary:true});
+                            zip.file($(this).attr('title').replace(saveAsNameRegex, '') + '.jpg', urlToPromise(coverUrls[$(this).attr('title')]), {binary:true});
                         });
                         zip.generateAsync({type:'blob', streamFiles: true}, function updateCallback(metaconfig) {
                             coverDownloadProgress(metaconfig.percent, 'Zipping covers...');
@@ -181,23 +195,25 @@
                         }
                     }
 
-                    function coverLinksCheck() {
-                        if (Object.keys(coverUrls).length >= selectedCovers.length) {
-                            try {
-                                if (id === 'cover-download-as-jpeg') {
-                                    downloadCoversAsJPEG();
-                                } else if (id === 'cover-download-as-zip') {
-                                    downloadCoversAsZIP();
+                    function coverUrlsCheck() {
+                        if (busyDownloading === true) {
+                            if (Object.keys(coverUrls).length >= selectedCovers.length) {
+                                try {
+                                    if (id === 'cover-download-as-jpeg') {
+                                        downloadCoversAsJPEG();
+                                    } else if (id === 'cover-download-as-zip') {
+                                        downloadCoversAsZIP();
+                                    }
+                                } catch (e) {
+                                    displayError(e.message);
+                                } finally {
+                                    coverUrls = {};
+                                    busyDownloading = false;
+                                    coverDownloadProgress(100, '');
                                 }
-                            } catch (e) {
-                                displayError(e.message);
-                            } finally {
-                                coverUrls = {};
-                                busyDownloading = false;
-                                coverDownloadProgress(100, '');
+                            } else {
+                                setTimeout(coverUrlsCheck, 100);
                             }
-                        } else {
-                            setTimeout(coverLinksCheck, 100);
                         }
                     }
 
@@ -213,7 +229,7 @@
                         } finally {
                             coverDownloadProgress(100, '');
                         }
-                        coverLinksCheck();
+                        coverUrlsCheck();
                     }
                 }
             });
