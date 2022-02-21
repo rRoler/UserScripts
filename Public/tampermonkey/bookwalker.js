@@ -12,9 +12,11 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip-utils/0.1.0/jszip-utils.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // @updateURL    https://raw.githubusercontent.com/RolerGames/UserScripts/master/Public/tampermonkey/bookwalker.js
+// @downloadURL  https://raw.githubusercontent.com/RolerGames/UserScripts/master/Public/tampermonkey/bookwalker.js
+// @supportURL   https://github.com/RolerGames/UserScripts/issues
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
-// @connect      c.bookwalker.jp
+// @connect      bookwalker.jp
 // @run-at       document-end
 // ==/UserScript==
 
@@ -53,13 +55,26 @@
 
     function bookwalkerCoverDownloader(dataAttribute, titleSection, coverSection, html, css) {
         const coverImages = $('img.lazy');
-        let coverUrls = {
-            'c.bookwalker.jp': {},
-            'blob': {}
+        let coverData = {
+            url: {
+                'c.bookwalker.jp': {},
+                'blob': {}
+            }
         };
+        let selectedCovers = [];
         let busyDownloading = false;
 
-        coverSection.before(`<div id="cover-download-button-container" class="bookwalker-downloader">${html}<p id="cover-download-error" class="bookwalker-downloader hidden"></p></div>`);
+        coverSection.before(`
+            <div id="cover-download-button-container" class="bookwalker-downloader">
+                <span id="cover-download-progress" class="bookwalker-downloader hidden">
+                    <span id="cover-download-status" class="bookwalker-downloader"></span>
+                    <span id="cover-download-progress-bar" class="bookwalker-downloader"></span>                        
+                    <span id="cover-download-percent" class="bookwalker-downloader"></span>
+                </span>
+                ${html}
+                <p id="cover-download-error" class="bookwalker-downloader hidden"></p>
+            </div>
+        `);
 
         function displayError(error) {
             const errorContainer = $('.bookwalker-downloader#cover-download-error');
@@ -71,20 +86,91 @@
         }
 
         coverImages.each(function() {
-            coverUrls['c.bookwalker.jp'][$(this).attr('title')] = `https://c.bookwalker.jp/coverImage_${(parseInt($(this).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}.jpg`;
+            coverData['url']['c.bookwalker.jp'][$(this).attr('title')] = `https://c.bookwalker.jp/coverImage_${(parseInt($(this).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}.jpg`;
 
             $(this).addClass('bookwalker-downloader');
             $(this).removeClass('cover-selected').parent().removeAttr('href').addClass('bookwalker-downloader');
             $(this).on('click', function () {
-                if (busyDownloading === false) {
-                    if ($(this).hasClass('cover-selected')) {
-                        $(this).removeClass('cover-selected');
-                    } else {
-                        $(this).addClass('cover-selected');
-                    }
+                if ($(this).hasClass('cover-selected')) {
+                    selectCover($(this), false);
+                } else {
+                    selectCover($(this));
                 }
             });
         });
+
+        function selectCover(cover, select) {
+            if (busyDownloading === false) {
+                if (select === false) {
+                    cover.removeClass('cover-selected');
+                } else {
+                    cover.addClass('cover-selected');
+                    try {
+                        getBestQualityCover(cover);
+                    } catch (e) {
+                        busyDownloading = false;
+                        displayError(e.message);
+                    } finally {
+                        coverDownloadProgress(100);
+                    }
+                }
+                selectedCovers = $('.bookwalker-downloader.cover-selected');
+            }
+        }
+
+        function getBestQualityCover(cover) {
+            const title = cover.attr('title');
+            const maxRetry403 = 8;
+            let retry403Count = {};
+            retry403Count[title] = 0;
+
+            if (!coverData['url']['blob'][title]) {
+                getAJAX(coverData['url']['c.bookwalker.jp'][title]);
+            }
+
+            function getAJAX(url) {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: url,
+                    responseType: 'blob',
+                    onload: onloadAJAX,
+                    onabort: reportAJAX_Error,
+                    onerror: reportAJAX_Error,
+                    ontimeout: reportAJAX_Error
+                });
+                function onloadAJAX(rspObj) {
+                    if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403Count[title] >= maxRetry403 || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
+                        displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
+                    }
+                    if (rspObj.status === 403 && retry403Count[title] < maxRetry403) {
+                        getAJAX(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, "") - 1))}.jpg`);
+                        retry403Count[title] = retry403Count[title] + 1;
+                    } else {
+                        coverData['url']['blob'][title] = window.URL.createObjectURL(rspObj.response);
+                        cover.attr(dataAttribute, coverData['url']['blob'][title]).attr('src', coverData['url']['blob'][title]).attr('srcset', coverData['url']['blob'][title]);
+                    }
+                    coverDownloadProgress(Object.keys(coverData['url']['blob']).length / selectedCovers.length * 100, 'Downloading covers...');
+                }
+                function reportAJAX_Error(rspObj) {
+                    displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
+                }
+            }
+        }
+
+        function coverDownloadProgress(percent, status) {
+            const element = $('span.bookwalker-downloader#cover-download-progress');
+
+            element.removeClass('hidden');
+            element.children('span[id="cover-download-status"]').html(`<p>${status}</p>`);
+            element.children('span[id="cover-download-progress-bar"]').html(`<progress class="bookwalker-downloader" max="100" value="${percent}"></progress>`);
+            element.children('span[id="cover-download-percent"]').html(`<p>${Math.round(percent * 100) / 100}%</p>`);
+            if (percent >= 100) {
+                element.addClass('hidden');
+                element.children('span[id="cover-download-status"]').html('');
+                element.children('span[id="cover-download-progress-bar"]').html('');
+                element.children('span[id="cover-download-percent"]').html('');
+            }
+        }
 
         function createButton(id, text) {
             const currentButton = $(`.bookwalker-downloader.cover-download-button#${id}`);
@@ -92,72 +178,19 @@
             currentButton.html(`
                 <a class="bookwalker-downloader">
                     <span id="cover-download-text" class="bookwalker-downloader">${text}</span>
-                    <span id="cover-download-status" class="bookwalker-downloader hidden"></span>
-                    <span id="cover-download-progress" class="bookwalker-downloader hidden"></span>                        
-                    <span id="cover-download-percent" class="bookwalker-downloader hidden"></span>
                 </a>
             `);
 
             currentButton.on('click', function() {
                 if (busyDownloading === false) {
-                    const selectedCovers = $('.bookwalker-downloader.cover-selected');
                     const saveAsNameRegex = /[\\\/:"*?<>|]/gi;
-
-                    function coverDownloadProgress(percent, status) {
-                        currentButton.children('a').children('span[id="cover-download-text"]').addClass('hidden');
-                        currentButton.children('a').children('span[id="cover-download-status"]').removeClass('hidden').html(`<p>${status}</p>`);
-                        currentButton.children('a').children('span[id="cover-download-progress"]').removeClass('hidden').html(`<progress max="100" value="${percent}"></progress>`);
-                        currentButton.children('a').children('span[id="cover-download-percent"]').removeClass('hidden').html(`<p>${Math.round(percent * 100) / 100}%</p>`);
-                        if (percent >= 100) {
-                            currentButton.children('a').children('span[id="cover-download-text"]').removeClass('hidden')
-                            currentButton.children('a').children('span[id="cover-download-status"]').addClass('hidden').html('');
-                            currentButton.children('a').children('span[id="cover-download-progress"]').addClass('hidden').html('');
-                            currentButton.children('a').children('span[id="cover-download-percent"]').addClass('hidden').html('');
-                        }
-                    }
-
-                    function getBestQualityCovers() {
-                        const maxRetry403Count = 8;
-                        let retry403Count = {};
-
-                        function getAJAX(url, title) {
-                            GM_xmlhttpRequest({
-                                method: 'GET',
-                                url: url,
-                                responseType: 'blob',
-                                onload: onloadAJAX,
-                                onabort: reportAJAX_Error,
-                                onerror: reportAJAX_Error,
-                                ontimeout: reportAJAX_Error
-                            });
-                            function onloadAJAX(rspObj) {
-                                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403Count[title] >= maxRetry403Count || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
-                                    displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
-                                }
-                                if (rspObj.status === 403 && retry403Count[title] < maxRetry403Count) {
-                                    getAJAX(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, "") - 1))}.jpg`, title);
-                                    retry403Count[title] = retry403Count[title] + 1;
-                                } else {
-                                    coverUrls['blob'][title] = window.URL.createObjectURL(rspObj.response);
-                                }
-                                coverDownloadProgress(Object.keys(coverUrls['blob']).length / selectedCovers.length * 100, 'Downloading covers...');
-                            }
-                            function reportAJAX_Error(rspObj) {
-                                displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
-                            }
-                        }
-
-                        selectedCovers.each(function () {
-                            retry403Count[$(this).attr('title')] = 0;
-
-                            getAJAX(coverUrls['c.bookwalker.jp'][$(this).attr('title')], $(this).attr('title'));
-                        });
-                    }
 
                     function downloadCoversAsJPEG() {
                         selectedCovers.each(function() {
-                            saveAs(coverUrls['blob'][$(this).attr('title')], $(this).attr('title').replace(saveAsNameRegex, '') + '.jpg');
+                            saveAs(coverData['url']['blob'][$(this).attr('title')], $(this).attr('title').replace(saveAsNameRegex, '') + '.jpg');
                         });
+                        busyDownloading = false;
+                        coverDownloadProgress(100);
                     }
 
                     function urlToPromise(url) {
@@ -175,40 +208,35 @@
                     function downloadCoversAsZIP() {
                         const zip = new JSZip();
                         selectedCovers.each(function() {
-                            zip.file($(this).attr('title').replace(saveAsNameRegex, '') + '.jpg', urlToPromise(coverUrls['blob'][$(this).attr('title')]), {binary:true});
+                            zip.file($(this).attr('title').replace(saveAsNameRegex, '') + '.jpg', urlToPromise(coverData['url']['blob'][$(this).attr('title')]), {binary:true});
                         });
                         zip.generateAsync({type:'blob', streamFiles: true}, function updateCallback(metaconfig) {
                             coverDownloadProgress(metaconfig.percent, 'Zipping covers...');
                         })
                             .then(function callback(blob) {
                                 saveAs(blob, titleSection.replace(saveAsNameRegex, '') + '.zip');
+                                busyDownloading = false;
+                                coverDownloadProgress(100);
                             });
                     }
 
                     function selectAllCovers() {
                         if (currentButton.children('a').children('span[id="cover-download-text"]').text() === 'Deselect All') {
                             selectedCovers.each(function() {
-                                $(this).removeClass('cover-selected');
+                                selectCover($(this), false);
                             });
                             currentButton.children('a').children('span[id="cover-download-text"]').text('Select All');
                         } else if (currentButton.children('a').children('span[id="cover-download-text"]').text() === 'Select All') {
                             coverImages.each(function() {
-                                $(this).addClass('cover-selected');
+                                selectCover($(this));
                             });
                             currentButton.children('a').children('span[id="cover-download-text"]').text('Deselect All');
                         }
                     }
 
-                    function replaceCovers() {
-                        selectedCovers.each(function () {
-                            $(this).attr(dataAttribute, coverUrls['blob'][$(this).attr('title')]).attr('src', coverUrls['blob'][$(this).attr('title')]).attr('srcset', coverUrls['blob'][$(this).attr('title')]);
-                        })
-                    }
-
                     function coverUrlsCheck() {
                         if (busyDownloading === true) {
-                            if (Object.keys(coverUrls['blob']).length >= selectedCovers.length) {
-                                replaceCovers()
+                            if (Object.keys(coverData['url']['blob']).length >= selectedCovers.length) {
                                 try {
                                     if (id === 'cover-download-as-jpeg') {
                                         downloadCoversAsJPEG();
@@ -216,11 +244,9 @@
                                         downloadCoversAsZIP();
                                     }
                                 } catch (e) {
-                                    displayError(e.message);
-                                } finally {
-                                    coverUrls['blob'] = {};
                                     busyDownloading = false;
                                     coverDownloadProgress(100);
+                                    displayError(e.message);
                                 }
                             } else {
                                 setTimeout(coverUrlsCheck, 100);
@@ -232,14 +258,6 @@
                         selectAllCovers();
                     } else if (selectedCovers.length > 0) {
                         busyDownloading = true;
-                        try {
-                            getBestQualityCovers();
-                        } catch (e) {
-                            busyDownloading = false;
-                            displayError(e.message);
-                        } finally {
-                            coverDownloadProgress(100);
-                        }
                         coverUrlsCheck();
                     }
                 }
@@ -273,6 +291,19 @@
                 max-height: 60px;
                 overflow-y: scroll;
                 margin: 10px;
+            }
+            progress.bookwalker-downloader {
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                appearance: none;
+                width: 80%;
+                height: 16px;
+                border: none;
+            }
+            span.bookwalker-downloader#cover-download-progress {
+                margin: 10px;
+                font-size: 16px;
+                font-weight: 700;
             }
         `);
     }
