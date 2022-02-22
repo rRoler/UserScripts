@@ -56,9 +56,14 @@
     function bookwalkerCoverDownloader(dataAttribute, titleSection, coverSection, html, css) {
         const coverImages = $('img.lazy');
         let coverData = {
-            url: {
+            'url': {
                 'c.bookwalker.jp': {},
-                'blob': {}
+                'blob': {},
+                'checked': {}
+            },
+            'progress': {
+                'total': 0,
+                'loaded': 0
             }
         };
         let selectedCovers = [];
@@ -121,35 +126,50 @@
         function getBestQualityCover(cover) {
             const title = cover.attr('title');
             const maxRetry403 = 8;
-            let retry403Count = {};
-            retry403Count[title] = 0;
+            let retry403Count = {
+                [title]: 0
+            };
 
             if (!coverData['url']['blob'][title]) {
                 getAJAX(coverData['url']['c.bookwalker.jp'][title]);
             }
 
             function getAJAX(url) {
+                let progressTotal = false;
+
                 GM_xmlhttpRequest({
                     method: 'GET',
                     url: url,
                     responseType: 'blob',
+                    onprogress: onprogressAJAX,
                     onload: onloadAJAX,
                     onabort: reportAJAX_Error,
                     onerror: reportAJAX_Error,
                     ontimeout: reportAJAX_Error
                 });
+                function onprogressAJAX(rspObj) {
+                    if (progressTotal === false) {
+                        coverData['progress']['total'] = coverData['progress']['total'] + rspObj.total;
+                        progressTotal = true;
+                    }
+                    if (rspObj.loaded >= rspObj.total) {
+                        coverData['progress']['loaded'] = coverData['progress']['loaded'] + rspObj.loaded;
+                        coverDownloadProgress(coverData['progress']['loaded'] / coverData['progress']['total'] * 100, 'Downloading covers...');
+                    } else {
+                        coverDownloadProgress(parseInt(coverData['progress']['loaded'] + rspObj.loaded) / coverData['progress']['total'] * 100, 'Downloading covers...');
+                    }
+                }
                 function onloadAJAX(rspObj) {
-                    if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403Count[title] >= maxRetry403 || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
+                    if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403Count[title] > maxRetry403 || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
                         displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
                     }
-                    if (rspObj.status === 403 && retry403Count[title] < maxRetry403) {
+                    if (rspObj.status === 403 && retry403Count[title] <= maxRetry403) {
                         getAJAX(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, "") - 1))}.jpg`);
                         retry403Count[title] = retry403Count[title] + 1;
                     } else {
                         coverData['url']['blob'][title] = window.URL.createObjectURL(rspObj.response);
                         cover.attr(dataAttribute, coverData['url']['blob'][title]).attr('src', coverData['url']['blob'][title]).attr('srcset', coverData['url']['blob'][title]);
                     }
-                    coverDownloadProgress(Object.keys(coverData['url']['blob']).length / selectedCovers.length * 100, 'Downloading covers...');
                 }
                 function reportAJAX_Error(rspObj) {
                     displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
@@ -236,7 +256,12 @@
 
                     function coverUrlsCheck() {
                         if (busyDownloading === true) {
-                            if (Object.keys(coverData['url']['blob']).length >= selectedCovers.length) {
+                            selectedCovers.each(function () {
+                                if (coverData['url']['blob'][$(this).attr('title')] && !coverData['url']['checked'][$(this).attr('title')]) {
+                                    coverData['url']['checked'][$(this).attr('title')] = true;
+                                }
+                            })
+                            if (Object.keys(coverData['url']['checked']).length >= selectedCovers.length) {
                                 try {
                                     if (id === 'cover-download-as-jpeg') {
                                         downloadCoversAsJPEG();
@@ -249,7 +274,7 @@
                                     displayError(e.message);
                                 }
                             } else {
-                                setTimeout(coverUrlsCheck, 100);
+                                setTimeout(coverUrlsCheck, 300);
                             }
                         }
                     }
