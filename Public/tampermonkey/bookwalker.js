@@ -283,6 +283,7 @@
                         selectAllCovers();
                     } else if (selectedCovers.length > 0) {
                         busyDownloading = true;
+                        coverData['url']['checked'] = {}
                         coverUrlsCheck();
                     }
                 }
