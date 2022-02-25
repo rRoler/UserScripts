@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.5
+// @version      0.5.1
 // @description  Select BookWalker covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/series/*/list/*
@@ -76,7 +76,7 @@
             selectAll: {
                 id: 'bookwalker-cover-downloader-select-all',
                 text: ['Select All', 'Deselect All'],
-                execute: (button) => {busyDownloading === false ? selectAllCovers(button):''}
+                execute: (button) => {selectAllCovers(button)}
             }
         }
 
@@ -225,6 +225,7 @@
             $(`#${button.id}`).on('click', element => button.execute($(element.currentTarget)));
         }
         async function coverUrlsCheck(button) {
+            busyDownloading = true;
             let checkedUrls = 0;
 
             coverData.selected.each(promiseUrls);
@@ -251,9 +252,7 @@
             }
         }
         function downloadCovers(fn, button) {
-            if (coverData.selected.length > 0) {
-                busyDownloading = true;
-
+            if (coverData.selected.length > 0 && busyDownloading === false) {
                 try {
                     coverUrlsCheck(button).then(() => {
                         try {
@@ -292,6 +291,7 @@
             }
         }
         function downloadCoversAsZIP(button) {
+            busyDownloading = true;
             const zip = new JSZip();
 
             coverData.selected.each(zipCover);
@@ -325,18 +325,20 @@
             }
         }
         function selectAllCovers(button) {
-            const buttonTextElement = button.children('a').children('.button-text');
+            if (busyDownloading === false) {
+                const buttonTextElement = button.children('a').children('.button-text');
 
-            if (buttonTextElement.text() === buttonData.button.selectAll.text[1]) {
-                coverData.image.each(function (i, element) {
-                    selectCover($(element), false);
-                });
-                buttonTextElement.text(buttonData.button.selectAll.text[0]);
-            } else if (buttonTextElement.text() === buttonData.button.selectAll.text[0]) {
-                coverData.image.each(function (i, element) {
-                    selectCover($(element));
-                });
-                buttonTextElement.text(buttonData.button.selectAll.text[1]);
+                if (buttonTextElement.text() === buttonData.button.selectAll.text[1]) {
+                    coverData.image.each(function (i, element) {
+                        selectCover($(element), false);
+                    });
+                    buttonTextElement.text(buttonData.button.selectAll.text[0]);
+                } else if (buttonTextElement.text() === buttonData.button.selectAll.text[0]) {
+                    coverData.image.each(function (i, element) {
+                        selectCover($(element));
+                    });
+                    buttonTextElement.text(buttonData.button.selectAll.text[1]);
+                }
             }
         }
 
