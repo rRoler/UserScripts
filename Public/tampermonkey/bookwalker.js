@@ -65,22 +65,25 @@
         buttonData.button = {
             downloadAsJpeg: {
                 id: 'bookwalker-cover-downloader-download-as-jpeg',
-                text: ['Download Selected Covers as JPEG']
+                text: ['Download Selected Covers as JPEG'],
+                execute: (button) => {downloadCovers(downloadCoversAsJPEG, button)}
             },
             downloadAsZip: {
                 id: 'bookwalker-cover-downloader-download-as-zip',
-                text: ['Download Selected Covers as ZIP']
+                text: ['Download Selected Covers as ZIP'],
+                execute: (button) => {downloadCovers(downloadCoversAsZIP, button)}
             },
             selectAll: {
                 id: 'bookwalker-cover-downloader-select-all',
-                text: ['Select All', 'Deselect All']
+                text: ['Select All', 'Deselect All'],
+                execute: (button) => {busyDownloading === false ? selectAllCovers(button):''}
             }
         }
 
         coverSection.before(`
             <div id="bookwalker-cover-downloader-main-div" class="bookwalker-cover-downloader">
-                <span id="bookwalker-cover-downloader-buttons" class="bookwalker-cover-downloader"></span>
-                <span id="bookwalker-cover-downloader-errors" class="bookwalker-cover-downloader hidden"></span>
+                <div id="bookwalker-cover-downloader-buttons" class="bookwalker-cover-downloader"></div>
+                <div id="bookwalker-cover-downloader-errors" class="bookwalker-cover-downloader hidden"></div>
             </div>
         `);
 
@@ -112,7 +115,7 @@
             `);
             $(element).addClass('bookwalker-cover-downloader');
             $(element).removeClass('cover-selected').parent().removeAttr('href').addClass('bookwalker-cover-downloader');
-            $(element).on('click', cover => coverClick($(cover.target)));
+            $(element).on('mousedown', cover => coverClick($(cover.currentTarget)));
         }
         function coverClick(element) {
             if (element.hasClass('cover-selected')) {
@@ -165,6 +168,7 @@
                 displayProgress(element.parent().children('.download-progress'), rspObj.loaded / rspObj.total * 100, 'Downloading cover...');
             }
             function onloadAJAX(rspObj) {
+                displayProgress(element.parent().children('.download-progress'), 100);
                 if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count[title] >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
                     displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
                 }
@@ -177,6 +181,7 @@
                 }
             }
             function reportAJAX_Error(rspObj) {
+                displayProgress(element.parent().children('.download-progress'), 100);
                 displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
             }
         }
@@ -208,9 +213,7 @@
             }
         }
         function createButton(i, button) {
-            const buttonContainer = $('#bookwalker-cover-downloader-buttons');
-
-            buttonContainer.append(`
+            $('#bookwalker-cover-downloader-buttons').append(`
                 <${buttonData.tag} id="${button.id}" class="${buttonData.class} bookwalker-cover-downloader">
                     <a class="bookwalker-cover-downloader">
                         <span class="bookwalker-cover-downloader button-text">${button.text[0]}</span>
@@ -219,73 +222,67 @@
                 </${buttonData.tag}>
             `);
 
-            const currentButton = $(`#${button.id}`);
+            $(`#${button.id}`).on('click', element => button.execute($(element.currentTarget)));
+        }
+        async function coverUrlsCheck(button) {
+            let checkedUrls = 0;
 
-            currentButton.on('click', buttonClick);
+            coverData.selected.each(promiseUrls);
 
-            function buttonClick() {
-                if (busyDownloading === false) {
-                    if (button.id === buttonData.button.selectAll.id) {
-                        selectAllCovers();
-                    } else if (coverData.selected.length > 0) {
-                        busyDownloading = true;
+            return await promiseUrls();
+
+            function promiseUrls(i, element) {
+                const title = $(element).attr('title');
+
+                return new Promise(resolve => {
+                    checkUrls();
+
+                    function checkUrls() {
+                        if (coverData.url['blob'][title]) {
+                            checkedUrls = checkedUrls + 1;
+                        } else if (checkedUrls >= coverData.selected.length) {
+                            resolve(checkedUrls);
+                        } else {
+                            setTimeout(checkUrls, 300);
+                        }
+                        displayProgress(button.children('a').children('.download-progress'), checkedUrls / coverData.selected.length * 100, 'Downloading covers...');
+                    }
+                });
+            }
+        }
+        function downloadCovers(fn, button) {
+            if (coverData.selected.length > 0) {
+                busyDownloading = true;
+
+                try {
+                    coverUrlsCheck(button).then(() => {
                         try {
-                            coverUrlsCheck();
+                            fn(button);
                         } catch (e) {
                             busyDownloading = false;
                             displayError(e.message);
                         }
-                    }
+                    });
+                } catch (e) {
+                    busyDownloading = false;
+                    displayProgress(button.children('a').children('.download-progress'), 100);
+                    displayError(e.message);
                 }
             }
-            function coverUrlsCheck() {
-                if (busyDownloading === true) {
-                    let checkedUrls = 0;
+        }
+        function downloadCoversAsJPEG() {
+            busyDownloading = false;
 
-                    coverData.selected.each(getUrls);
-
-                    async function getUrls(i, element) {
-                        const title = $(element).attr('title');
-                        const checkedUrl = await promiseUrl(title);
-                        checkedUrls = checkedUrls + checkedUrl;
-
-                        displayProgress($(currentButton.children('a').children('.download-progress')), checkedUrls / coverData.selected.length * 100, 'Downloading covers...');
-
-                        if (checkedUrls >= coverData.selected.length) {
-                            downloadCovers()
-                        }
-                    }
-                    function downloadCovers() {
-                        try {
-                            if (button.id === buttonData.button.downloadAsJpeg.id) {
-                                downloadCoversAsJPEG();
-                            } else if (button.id === buttonData.button.downloadAsZip.id) {
-                                downloadCoversAsZIP();
-                            }
-                        } catch (e) {
-                            busyDownloading = false;
-                            displayError(e.message);
-                        }
-                    }
-                    function promiseUrl(title) {
-                        return new Promise(resolve => {
-                            checkUrl()
-
-                            function checkUrl() {
-                                if (coverData.url['blob'][title]) {
-                                    resolve(1);
-                                } else {
-                                    setTimeout(checkUrl, 300);
-                                }
-                            }
-                        });
-                    }
+            if (coverData.selected.length > 5) {
+                if (confirm('You are about to save more than 5 covers ONE BY ONE!')) {
+                    execute();
                 }
+            } else {
+                execute();
             }
-            function downloadCoversAsJPEG() {
+
+            function execute() {
                 coverData.selected.each(saveCover);
-
-                busyDownloading = false;
 
                 function saveCover(i, element) {
                     const title = $(element).attr('title');
@@ -293,53 +290,53 @@
                     saveAs(coverData.url['blob'][title], title.replace(saveAsNameRegex, '') + '.jpg');
                 }
             }
-            function downloadCoversAsZIP() {
-                const zip = new JSZip();
+        }
+        function downloadCoversAsZIP(button) {
+            const zip = new JSZip();
 
-                coverData.selected.each(zipCover);
+            coverData.selected.each(zipCover);
 
-                zip.generateAsync({type:'blob', streamFiles: true}, function updateCallback(metaconfig) {
-                    displayProgress($(currentButton.children('a').children('.download-progress')), metaconfig.percent, 'Zipping covers...');
-                })
-                    .then(function callback(blob) {
-                        saveAs(blob, titleSection.replace(saveAsNameRegex, '') + '.zip');
+            zip.generateAsync({type:'blob', streamFiles: true}, function updateCallback(metaconfig) {
+                displayProgress(button.children('a').children('.download-progress'), metaconfig.percent, 'Zipping covers...');
+            })
+                .then(function callback(blob) {
+                    saveAs(blob, titleSection.replace(saveAsNameRegex, '') + '.zip');
+                    busyDownloading = false;
+                    displayProgress(button.children('a').children('.download-progress'), 100);
+                });
 
-                        busyDownloading = false;
-                    });
+            function zipCover(i, element) {
+                const title = $(element).attr('title');
 
-                function zipCover(i, element) {
-                    const title = $(element).attr('title');
-
-                    zip.file(title.replace(saveAsNameRegex, '') + '.jpg', coverToPromise(coverData.url['blob'][title], title), {binary:true});
-                }
-                function coverToPromise(url, title) {
-                    return new Promise(function(resolve, reject) {
-                        JSZipUtils.getBinaryContent(url, function(error, config) {
-                            if (error) {
-                                displayError(`${error} ${title} ${url}`);
-
-                                reject(error);
-                            } else {
-                                resolve(config);
-                            }
-                        });
-                    });
-                }
+                zip.file(title.replace(saveAsNameRegex, '') + '.jpg', coverToPromise(coverData.url['blob'][title], title), {binary:true});
             }
-            function selectAllCovers() {
-                const buttonTextElement = currentButton.children('a').children('.button-text');
+            function coverToPromise(url, title) {
+                return new Promise(function(resolve, reject) {
+                    JSZipUtils.getBinaryContent(url, function(error, config) {
+                        if (error) {
+                            displayError(`${error} ${title} ${url}`);
 
-                if (buttonTextElement.text() === buttonData.button.selectAll.text[1]) {
-                    coverData.image.each(function (i, element) {
-                        selectCover($(element), false);
+                            reject(error);
+                        } else {
+                            resolve(config);
+                        }
                     });
-                    buttonTextElement.text(buttonData.button.selectAll.text[0]);
-                } else if (buttonTextElement.text() === buttonData.button.selectAll.text[0]) {
-                    coverData.image.each(function (i, element) {
-                        selectCover($(element));
-                    });
-                    buttonTextElement.text(buttonData.button.selectAll.text[1]);
-                }
+                });
+            }
+        }
+        function selectAllCovers(button) {
+            const buttonTextElement = button.children('a').children('.button-text');
+
+            if (buttonTextElement.text() === buttonData.button.selectAll.text[1]) {
+                coverData.image.each(function (i, element) {
+                    selectCover($(element), false);
+                });
+                buttonTextElement.text(buttonData.button.selectAll.text[0]);
+            } else if (buttonTextElement.text() === buttonData.button.selectAll.text[0]) {
+                coverData.image.each(function (i, element) {
+                    selectCover($(element));
+                });
+                buttonTextElement.text(buttonData.button.selectAll.text[1]);
             }
         }
 
