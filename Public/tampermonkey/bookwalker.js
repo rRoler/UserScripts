@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.5.1
+// @version      0.5.2
 // @description  Select BookWalker covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/series/*/list/*
@@ -143,9 +143,7 @@
             const title = element.attr('title');
             const retry403 = {
                 max: 8,
-                count: {
-                    [title]: 0
-                }
+                count: 0
             }
 
             if (!coverData.url['blob'][title]) {
@@ -169,12 +167,12 @@
             }
             function onloadAJAX(rspObj) {
                 displayProgress(element.parent().children('.download-progress'), 100);
-                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count[title] >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
+                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
                     displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
                 }
-                if (rspObj.status === 403 && retry403.count[title] < retry403.max) {
+                if (rspObj.status === 403 && retry403.count < retry403.max) {
                     getAJAX(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, "") - 1))}.jpg`);
-                    retry403.count[title] = retry403.count[title] + 1;
+                    retry403.count = retry403.count + 1;
                 } else {
                     coverData.url['blob'][title] = window.URL.createObjectURL(rspObj.response);
                     displayCoverSize(element, rspObj.response);
@@ -371,15 +369,14 @@
                 background-color: rgba(0, 0, 0, 0.50);
                 font-size: 14px;
                 position: absolute;
+                z-index: 1000;
+                bottom: 0;
+                left: 0;
             }
             .bookwalker-cover-downloader.cover-data.cover-size {
-                top: 0;
-                left: 0;
                 width: fit-content;
             }
             .bookwalker-cover-downloader.cover-data.download-progress {
-                bottom: 0;
-                left: 0;
                 width: 100%;
                 text-align: center;
             }
