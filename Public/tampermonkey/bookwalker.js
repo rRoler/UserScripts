@@ -172,7 +172,7 @@
                 }
                 if (rspObj.status === 403 && retry403.count < retry403.max) {
                     getAJAX(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, "") - 1))}.jpg`);
-                    retry403.count = retry403.count + 1;
+                    retry403.count = ++retry403.count;
                 } else {
                     coverData.url['blob'][title] = window.URL.createObjectURL(rspObj.response);
                     displayCoverSize(element, rspObj.response);
@@ -238,7 +238,7 @@
 
                     function checkUrls() {
                         if (coverData.url['blob'][title]) {
-                            checkedUrls = checkedUrls + 1;
+                            checkedUrls = ++checkedUrls;
                         } else if (checkedUrls >= coverData.selected.length) {
                             resolve(checkedUrls);
                         } else {
