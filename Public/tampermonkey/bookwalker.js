@@ -66,17 +66,17 @@
             downloadAsJpeg: {
                 id: 'bookwalker-cover-downloader-download-as-jpeg',
                 text: ['Download Selected Covers as JPEG'],
-                execute: (button) => {downloadCovers(downloadCoversAsJPEG, button)}
+                execute(button) {downloadCovers(downloadCoversAsJPEG, button)}
             },
             downloadAsZip: {
                 id: 'bookwalker-cover-downloader-download-as-zip',
                 text: ['Download Selected Covers as ZIP'],
-                execute: (button) => {downloadCovers(downloadCoversAsZIP, button)}
+                execute(button) {downloadCovers(downloadCoversAsZIP, button)}
             },
             selectAll: {
                 id: 'bookwalker-cover-downloader-select-all',
                 text: ['Select All', 'Deselect All'],
-                execute: (button) => {selectAllCovers(button)}
+                execute(button) {selectAllCovers(button)}
             }
         }
 
