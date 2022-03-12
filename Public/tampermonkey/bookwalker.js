@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.6
+// @version      0.6.1
 // @description  Select BookWalker covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/series/*/list/*
@@ -63,6 +63,7 @@
         const coverData = {
             image: $('img.lazy'),
             selected: [],
+            clicked: {},
             url: {
                 'c.bookwalker.jp': {},
                 'blob': {},
@@ -148,7 +149,7 @@
 
                     element.addClass('cover-selected');
 
-                    if (!coverData.url['blob'][title]) {
+                    if (!coverData.clicked[title] || coverData.clicked[title] === false) {
                         try {
                             getBestQualityCover(element, coverData.url['c.bookwalker.jp'][title]);
                         } catch (e) {
@@ -167,6 +168,7 @@
                 max: 8,
                 count: 0
             }
+            coverData.clicked[title] = true;
 
             displayProgress(element.parent().children('.download-progress'), 0, 'Downloading cover...');
             readyToDownload().then(() => {getAJAX(url)});
