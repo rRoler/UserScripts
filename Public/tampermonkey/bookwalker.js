@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.6.2
+// @version      0.6.3
 // @description  Select BookWalker covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/series/*/list/*
@@ -177,6 +177,7 @@
             async function readyToDownload() {
                 return await new Promise(resolve => {
                     checkDownloads();
+
                     function checkDownloads() {
                         if (concurrentDownloads.count < concurrentDownloads.max) {
                             ++concurrentDownloads.count;
@@ -216,7 +217,7 @@
                     coverData.url['c.bookwalker.jp'][id] = rspObj.finalUrl;
                     coverData.url['blob'][id] = window.URL.createObjectURL(rspObj.response);
                     displayProgress(element.parent().children('.download-progress'), 100);
-                    displayCoverSize(element, rspObj.response);
+                    displayCover(element, coverData.url['blob'][id]);
                     element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${rspObj.finalUrl}">${rspObj.finalUrl.replace(/https:\/\/c.bookwalker.jp\//gi, '')}</a>`);
                     coverFixElement.removeClass('hidden');
                     if (coverFixElement.children('p').text() === buttonData.other.fixCover.text[2]) {
@@ -232,19 +233,13 @@
                 displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
             }
         }
-        function displayCoverSize(element, blob) {
-            const coverUrl = coverData.url['blob'][element.attr('id')];
-            const fileReader = new FileReader;
+        function displayCover(element, url) {
+            const image = new Image;
 
-            element.attr(dataAttribute, coverUrl).attr('src', coverUrl).attr('srcset', coverUrl);
-            fileReader.readAsDataURL(blob);
-            fileReader.onload = function () {
-                const image = new Image;
-
-                image.src = fileReader.result;
-                image.onload = function () {
-                    element.parent().children('.cover-size').removeClass('hidden').html(`<p>${image.width}x${image.height}</p>`);
-                };
+            element.attr(dataAttribute, url).attr('src', url).attr('srcset', url);
+            image.src = url;
+            image.onload = function () {
+                element.parent().children('.cover-size').removeClass('hidden').html(`<p>${image.width}x${image.height}</p>`);
             };
         }
         function displayProgress(element, percent, status) {
