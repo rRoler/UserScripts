@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.6.1
+// @version      0.6.2
 // @description  Select BookWalker covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/series/*/list/*
@@ -90,7 +90,6 @@
         }
         buttonData.other = {
             fixCover: {
-                id: 'bookwalker-cover-downloader-fix-cover',
                 text: ['Try to Fix', 'Revert', 'Fixing...', 'Reverting...']
             }
         }
@@ -121,8 +120,8 @@
             console.error(message);
         }
         function addCoverData(i, element) {
-            const title = $(element).attr('title');
-            coverData.url['c.bookwalker.jp'][title] = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}.jpg`;
+            const id = `bookwalker-cover-downloader-cover-${i}`;
+            coverData.url['c.bookwalker.jp'][id] = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}.jpg`;
 
             $(element).before(`
                 <span class="bookwalker-cover-downloader cover-data cover-size hidden"></span>
@@ -132,6 +131,7 @@
             `);
             $(element).parent().children('.cover-fix').children('p').on('click', fixCover);
             $(element).addClass('bookwalker-cover-downloader');
+            $(element).attr('id', id);
             $(element).removeClass('cover-selected').parent().removeAttr('href').addClass('bookwalker-cover-downloader');
             $(element).on('mousedown', cover => coverClick($(cover.currentTarget)));
         }
@@ -145,13 +145,13 @@
         function selectCover(element, select = true) {
             if (busyDownloading === false) {
                 if (select === true) {
-                    const title = element.attr('title');
+                    const id = element.attr('id');
 
                     element.addClass('cover-selected');
 
-                    if (!coverData.clicked[title] || coverData.clicked[title] === false) {
+                    if (!coverData.clicked[id] || coverData.clicked[id] === false) {
                         try {
-                            getBestQualityCover(element, coverData.url['c.bookwalker.jp'][title]);
+                            getBestQualityCover(element, coverData.url['c.bookwalker.jp'][id]);
                         } catch (e) {
                             displayError(e.message);
                         }
@@ -163,12 +163,13 @@
             }
         }
         function getBestQualityCover(element, url) {
+            const id = element.attr('id');
             const title = element.attr('title');
             const retry403 = {
                 max: 8,
                 count: 0
             }
-            coverData.clicked[title] = true;
+            coverData.clicked[id] = true;
 
             displayProgress(element.parent().children('.download-progress'), 0, 'Downloading cover...');
             readyToDownload().then(() => {getAJAX(url)});
@@ -178,7 +179,7 @@
                     checkDownloads();
                     function checkDownloads() {
                         if (concurrentDownloads.count < concurrentDownloads.max) {
-                            concurrentDownloads.count = ++concurrentDownloads.count;
+                            ++concurrentDownloads.count;
                             resolve(true);
                         } else {
                             setTimeout(checkDownloads, 400);
@@ -207,13 +208,13 @@
                 }
                 if (rspObj.status === 403 && retry403.count < retry403.max) {
                     getAJAX(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, '') - 1))}.jpg`);
-                    retry403.count = ++retry403.count;
+                    ++retry403.count;
                 } else {
                     const coverFixElement = element.parent().children('.cover-fix');
 
                     concurrentDownloads.count = --concurrentDownloads.count;
-                    coverData.url['c.bookwalker.jp'][title] = rspObj.finalUrl;
-                    coverData.url['blob'][title] = window.URL.createObjectURL(rspObj.response);
+                    coverData.url['c.bookwalker.jp'][id] = rspObj.finalUrl;
+                    coverData.url['blob'][id] = window.URL.createObjectURL(rspObj.response);
                     displayProgress(element.parent().children('.download-progress'), 100);
                     displayCoverSize(element, rspObj.response);
                     element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${rspObj.finalUrl}">${rspObj.finalUrl.replace(/https:\/\/c.bookwalker.jp\//gi, '')}</a>`);
@@ -232,7 +233,7 @@
             }
         }
         function displayCoverSize(element, blob) {
-            const coverUrl = coverData.url['blob'][element.attr('title')];
+            const coverUrl = coverData.url['blob'][element.attr('id')];
             const fileReader = new FileReader;
 
             element.attr(dataAttribute, coverUrl).attr('src', coverUrl).attr('srcset', coverUrl);
@@ -262,22 +263,22 @@
             if (busyDownloading === false) {
                 const currentElement = $(element.currentTarget);
                 const imgElement = currentElement.parent().parent().children('img');
-                const imgElementTitle = imgElement.attr('title');
-                delete coverData.url['blob'][imgElementTitle];
+                const imgElementId = imgElement.attr('id');
+                delete coverData.url['blob'][imgElementId];
 
                 if (currentElement.text() === buttonData.other.fixCover.text[0]) {
-                    coverData.url['old'][imgElementTitle] = coverData.url['c.bookwalker.jp'][imgElementTitle];
+                    coverData.url['old'][imgElementId] = coverData.url['c.bookwalker.jp'][imgElementId];
 
                     currentElement.text(buttonData.other.fixCover.text[2]);
                     try {
-                        getBestQualityCover(imgElement, `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.url['c.bookwalker.jp'][imgElementTitle].replace(/^\D+|\D+$/g, '') - 1))}.jpg`);
+                        getBestQualityCover(imgElement, `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.url['c.bookwalker.jp'][imgElementId].replace(/^\D+|\D+$/g, '') - 1))}.jpg`);
                     } catch (e) {
                         displayError(e.message);
                     }
                 } else if (currentElement.text() === buttonData.other.fixCover.text[1]) {
                     currentElement.text(buttonData.other.fixCover.text[3]);
                     try {
-                        getBestQualityCover(imgElement, coverData.url['old'][imgElementTitle]);
+                        getBestQualityCover(imgElement, coverData.url['old'][imgElementId]);
                     } catch (e) {
                         displayError(e.message);
                     }
@@ -305,14 +306,14 @@
             return await promiseUrls();
 
             function promiseUrls(i, element) {
-                const title = $(element).attr('title');
+                const id = $(element).attr('id');
 
                 return new Promise(resolve => {
                     checkUrls();
 
                     function checkUrls() {
-                        if (coverData.url['blob'][title]) {
-                            checkedUrls = ++checkedUrls;
+                        if (coverData.url['blob'][id]) {
+                            ++checkedUrls;
                         } else if (checkedUrls >= coverData.selected.length) {
                             resolve(checkedUrls);
                         } else {
@@ -356,9 +357,10 @@
                 coverData.selected.each(saveCover);
 
                 function saveCover(i, element) {
+                    const id = $(element).attr('id');
                     const title = $(element).attr('title');
 
-                    saveAs(coverData.url['blob'][title], title.replace(saveAsNameRegex, '') + '.jpg');
+                    saveAs(coverData.url['blob'][id], title.replace(saveAsNameRegex, '') + '.jpg');
                 }
             }
         }
@@ -378,9 +380,10 @@
                 });
 
             function zipCover(i, element) {
+                const id = $(element).attr('id');
                 const title = $(element).attr('title');
 
-                zip.file(title.replace(saveAsNameRegex, '') + '.jpg', coverToPromise(coverData.url['blob'][title], title), {binary:true});
+                zip.file(title.replace(saveAsNameRegex, '') + '.jpg', coverToPromise(coverData.url['blob'][id], title), {binary:true});
             }
             function coverToPromise(url, title) {
                 return new Promise(function(resolve, reject) {
