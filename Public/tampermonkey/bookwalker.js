@@ -1,21 +1,25 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.6.3
+// @version      0.7
 // @description  Select BookWalker covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
-// @match        https://bookwalker.jp/series/*/list/*
+// @match        https://bookwalker.jp/series/*
 // @match        https://global.bookwalker.jp/series/*
 // @icon         https://bookwalker.jp/favicon.ico
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip-utils/0.1.0/jszip-utils.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
+// @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @updateURL    https://raw.githubusercontent.com/RolerGames/UserScripts/master/Public/tampermonkey/bookwalker.js
 // @downloadURL  https://raw.githubusercontent.com/RolerGames/UserScripts/master/Public/tampermonkey/bookwalker.js
 // @supportURL   https://github.com/RolerGames/UserScripts/issues
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // @connect      bookwalker.jp
 // @run-at       document-end
 // ==/UserScript==
@@ -23,20 +27,63 @@
 (function() {
     'use strict';
 
-    if (window.location.href.search(/https:\/\/bookwalker.jp\/series\/.*\/list\/.*/gi) > -1) {
-        bookwalkerCoverDownloader(
-            'data-original',
-            $('.o-contents-section__title').text(),
-            $('.o-contents-section__body').first(), {
-                tag: 'button',
-                class: 'a-basic-btn--secondary'
-            }, `
-            button.bookwalker-cover-downloader.a-basic-btn--secondary {
-                margin: 2px;
-                display: inline-block;
-                max-width: 256px;
+    let needsReload = false;
+    GM_config.init({
+        'id': 'bookwalker-cover-downloader-config',
+        'title': 'BookWalker Cover Downloader Settings',
+        'fields': {
+            'maxConcurrentDownloads': {
+                'label': 'Maximum concurrent downloads:',
+                'section': ['General', '<hr>'],
+                'type': 'int',
+                'title': 'Maximum number of covers to download at the same time. min=1, max=64.',
+                'min': 1,
+                'max': 64,
+                'default': 4
+            },
+            'max403Retries': {
+                'label': 'Maximum download retries:',
+                'type': 'int',
+                'title': 'Maximum number of times to change the cover URL and try to download the cover if the expected URL is wrong. min=0, max=32.',
+                'min': 0,
+                'max': 32,
+                'default': 8
+            },
+            'redirectSeriesPages': {
+                'label': 'Redirect the series page to list',
+                'section': ['BookWalker Japan', 'https://bookwalker.jp/'],
+                'type': 'checkbox',
+                'title': 'Redirect the /series/ page to the /series/*/list/ page.',
+                'default': false
             }
-        `);
+        },
+        'events': {
+            'save': function() {needsReload = true},
+            'close': reloadPage
+        }
+    });
+    GM_registerMenuCommand('Settings', function() {GM_config.open()});
+
+    if (window.location.href.search(/https:\/\/bookwalker.jp\/series\/.*/gi) > -1) {
+        if (window.location.href.search(/https:\/\/.*\/series\/.*\/list\/.*/gi) <= -1) {
+            if (GM_config.get('redirectSeriesPages') === true && $(`a[href="${window.location.href}list/"]`).length > 0) {
+                window.location.replace(`${window.location.href}list/`);
+            }
+        } else {
+            bookwalkerCoverDownloader(
+                'data-original',
+                $('.o-contents-section__title').text(),
+                $('.o-contents-section__body').first(), {
+                    tag: 'button',
+                    class: 'a-basic-btn--secondary'
+                }, `
+                button.bookwalker-cover-downloader.a-basic-btn--secondary {
+                    margin: 2px;
+                    display: inline-block;
+                    max-width: 256px;
+                }
+            `);
+        }
     } else if (window.location.href.search(/https:\/\/global.bookwalker.jp\/series\/.*/gi) > -1) {
         bookwalkerCoverDownloader(
             'data-srcset',
@@ -54,21 +101,28 @@
         `);
     }
 
+    function reloadPage() {
+        if (needsReload === true) {
+            location.reload();
+        }
+    }
     function bookwalkerCoverDownloader(dataAttribute, titleSection, coverSection, buttonData = {tag: '', class: ''}, css) {
         const concurrentDownloads = {
-            max: 4,
+            max: GM_config.get('maxConcurrentDownloads'),
             count: 0
         }
         const saveAsNameRegex = /[\\\/:"*?<>|]/gi;
         const coverData = {
             image: $('img.lazy'),
-            selected: [],
-            clicked: {},
             url: {
                 'c.bookwalker.jp': {},
                 'blob': {},
                 'old': {}
-            }
+            },
+            extension: '.jpg',
+            name: {},
+            selected: [],
+            clicked: {}
         }
         let busyDownloading = false;
         buttonData.button = {
@@ -121,7 +175,7 @@
         }
         function addCoverData(i, element) {
             const id = `bookwalker-cover-downloader-cover-${i}`;
-            coverData.url['c.bookwalker.jp'][id] = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}.jpg`;
+            coverData.url['c.bookwalker.jp'][id] = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}${coverData.extension}`;
 
             $(element).before(`
                 <span class="bookwalker-cover-downloader cover-data cover-size hidden"></span>
@@ -150,6 +204,15 @@
                     element.addClass('cover-selected');
 
                     if (!coverData.clicked[id] || coverData.clicked[id] === false) {
+                        const name = element.attr('title').replace(saveAsNameRegex, '');
+
+                        if (coverData.name[name] > -1) {
+                            coverData.name[id] = `${name}(${++coverData.name[name]})`;
+                        } else {
+                            coverData.name[name] = 0;
+                            coverData.name[id] = name;
+                        }
+
                         try {
                             getBestQualityCover(element, coverData.url['c.bookwalker.jp'][id]);
                         } catch (e) {
@@ -164,9 +227,8 @@
         }
         function getBestQualityCover(element, url) {
             const id = element.attr('id');
-            const title = element.attr('title');
             const retry403 = {
-                max: 8,
+                max: GM_config.get('max403Retries'),
                 count: 0
             }
             coverData.clicked[id] = true;
@@ -205,42 +267,44 @@
             }
             function onloadAJAX(rspObj) {
                 if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
-                    displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
+                    displayError(`${rspObj.status} ${rspObj.statusText} ${coverData.name[id]} ${rspObj.finalUrl}`);
                 }
                 if (rspObj.status === 403 && retry403.count < retry403.max) {
-                    getAJAX(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, '') - 1))}.jpg`);
+                    getAJAX(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, '') - 1))}${coverData.extension}`);
                     ++retry403.count;
                 } else {
-                    const coverFixElement = element.parent().children('.cover-fix');
-
-                    concurrentDownloads.count = --concurrentDownloads.count;
+                    --concurrentDownloads.count;
                     coverData.url['c.bookwalker.jp'][id] = rspObj.finalUrl;
                     coverData.url['blob'][id] = window.URL.createObjectURL(rspObj.response);
                     displayProgress(element.parent().children('.download-progress'), 100);
-                    displayCover(element, coverData.url['blob'][id]);
-                    element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${rspObj.finalUrl}">${rspObj.finalUrl.replace(/https:\/\/c.bookwalker.jp\//gi, '')}</a>`);
-                    coverFixElement.removeClass('hidden');
-                    if (coverFixElement.children('p').text() === buttonData.other.fixCover.text[2]) {
-                        coverFixElement.children('p').text(buttonData.other.fixCover.text[1]);
-                    } else if (coverFixElement.children('p').text() === buttonData.other.fixCover.text[3]) {
-                        coverFixElement.children('p').text(buttonData.other.fixCover.text[0]);
-                    }
+                    displayCover(element, id);
                 }
             }
             function reportAJAX_Error(rspObj) {
-                concurrentDownloads.count = --concurrentDownloads.count;
+                --concurrentDownloads.count;
                 displayProgress(element.parent().children('.download-progress'), 100);
-                displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${rspObj.finalUrl}`);
+                displayError(`${rspObj.status} ${rspObj.statusText} ${coverData.name[id]} ${rspObj.finalUrl}`);
             }
         }
-        function displayCover(element, url) {
+        function displayCover(element, id) {
             const image = new Image;
+            const coverFixElement = element.parent().children('.cover-fix');
 
-            element.attr(dataAttribute, url).attr('src', url).attr('srcset', url);
-            image.src = url;
+            element.attr(dataAttribute, coverData.url['blob'][id]).attr('src', coverData.url['blob'][id]).attr('srcset', coverData.url['blob'][id]);
+
+            image.src = coverData.url['blob'][id];
             image.onload = function () {
                 element.parent().children('.cover-size').removeClass('hidden').html(`<p>${image.width}x${image.height}</p>`);
             };
+
+            element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.url['c.bookwalker.jp'][id]}">${coverData.url['c.bookwalker.jp'][id].replace(/https:\/\/c.bookwalker.jp\/coverImage_/gi, '')}</a>`);
+
+            coverFixElement.removeClass('hidden');
+            if (coverFixElement.children('p').text() === buttonData.other.fixCover.text[2]) {
+                coverFixElement.children('p').text(buttonData.other.fixCover.text[1]);
+            } else if (coverFixElement.children('p').text() === buttonData.other.fixCover.text[3]) {
+                coverFixElement.children('p').text(buttonData.other.fixCover.text[0]);
+            }
         }
         function displayProgress(element, percent, status) {
             if (percent >= 0 && percent < 100) {
@@ -266,7 +330,7 @@
 
                     currentElement.text(buttonData.other.fixCover.text[2]);
                     try {
-                        getBestQualityCover(imgElement, `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.url['c.bookwalker.jp'][imgElementId].replace(/^\D+|\D+$/g, '') - 1))}.jpg`);
+                        getBestQualityCover(imgElement, `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.url['c.bookwalker.jp'][imgElementId].replace(/^\D+|\D+$/g, '') - 1))}${coverData.extension}`);
                     } catch (e) {
                         displayError(e.message);
                     }
@@ -353,9 +417,8 @@
 
                 function saveCover(i, element) {
                     const id = $(element).attr('id');
-                    const title = $(element).attr('title');
 
-                    saveAs(coverData.url['blob'][id], title.replace(saveAsNameRegex, '') + '.jpg');
+                    saveAs(coverData.url['blob'][id], coverData.name[id] + coverData.extension);
                 }
             }
         }
@@ -376,15 +439,17 @@
 
             function zipCover(i, element) {
                 const id = $(element).attr('id');
-                const title = $(element).attr('title');
 
-                zip.file(title.replace(saveAsNameRegex, '') + '.jpg', coverToPromise(coverData.url['blob'][id], title), {binary:true});
+                zip.file(coverData.name[id] + coverData.extension, coverToPromise(id), {binary:true});
             }
-            function coverToPromise(url, title) {
+            function coverToPromise(id) {
                 return new Promise(function(resolve, reject) {
-                    JSZipUtils.getBinaryContent(url, function(error, config) {
+                    JSZipUtils.getBinaryContent(coverData.url['blob'][id], function(error, config) {
                         if (error) {
-                            displayError(`${error} ${title} ${url}`);
+                            busyDownloading = false;
+                            coverData.clicked[id] = false;
+
+                            displayError(`${error} ${coverData.name[id]} ${coverData.url['c.bookwalker.jp'][id]}`);
 
                             reject(error);
                         } else {
