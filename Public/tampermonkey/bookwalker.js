@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.7
-// @description  Select BookWalker covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
+// @version      0.7.1
+// @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
-// @match        https://bookwalker.jp/series/*
-// @match        https://global.bookwalker.jp/series/*
+// @match        https://bookwalker.jp/*
+// @match        https://global.bookwalker.jp/*
 // @icon         https://bookwalker.jp/favicon.ico
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
@@ -39,15 +39,47 @@
                 'title': 'Maximum number of covers to download at the same time. min=1, max=64.',
                 'min': 1,
                 'max': 64,
-                'default': 4
+                'default': 64
             },
             'max403Retries': {
                 'label': 'Maximum download retries:',
                 'type': 'int',
-                'title': 'Maximum number of times to change the cover URL and try to download the cover if the expected URL is wrong. min=0, max=32.',
+                'title': 'Maximum number of times to change the cover URL and try to download the cover if the expected URL is wrong. min=0, max=16.',
                 'min': 0,
-                'max': 32,
-                'default': 8
+                'max': 16,
+                'default': 4
+            },
+            'saveAsJPEGConfirm': {
+                'label': 'Confirm saving as JPEG if the number of selected covers is bigger than:',
+                'type': 'int',
+                'title': '(0 = disabled) Confirm saving as JPEG if the number of selected covers is bigger. min=0, max=64.',
+                'min': 0,
+                'max': 64,
+                'default': 4
+            },
+            'replaceCover': {
+                'label': 'Replace cover',
+                'type': 'checkbox',
+                'title': 'Replace the existing cover with the new one.',
+                'default': true
+            },
+            'showTryToFix': {
+                'label': 'Show Try to Fix',
+                'type': 'checkbox',
+                'title': 'Show the Try to Fix button.',
+                'default': true
+            },
+            'showCoverSize': {
+                'label': 'Show cover size',
+                'type': 'checkbox',
+                'title': 'Show the size of the new cover.',
+                'default': true
+            },
+            'showCoverURL': {
+                'label': 'Show cover URL',
+                'type': 'checkbox',
+                'title': 'Show the URL of the new cover.',
+                'default': true
             },
             'redirectSeriesPages': {
                 'label': 'Redirect the series page to list',
@@ -287,23 +319,29 @@
             }
         }
         function displayCover(element, id) {
-            const image = new Image;
-            const coverFixElement = element.parent().children('.cover-fix');
+            if (GM_config.get('replaceCover') === true) {
+                element.attr(dataAttribute, coverData.url['blob'][id]).attr('src', coverData.url['blob'][id]).attr('srcset', coverData.url['blob'][id]);
+            }
+            if (GM_config.get('showTryToFix') === true) {
+                const coverFixElement = element.parent().children('.cover-fix');
 
-            element.attr(dataAttribute, coverData.url['blob'][id]).attr('src', coverData.url['blob'][id]).attr('srcset', coverData.url['blob'][id]);
+                coverFixElement.removeClass('hidden');
+                if (coverFixElement.children('p').text() === buttonData.other.fixCover.text[2]) {
+                    coverFixElement.children('p').text(buttonData.other.fixCover.text[1]);
+                } else if (coverFixElement.children('p').text() === buttonData.other.fixCover.text[3]) {
+                    coverFixElement.children('p').text(buttonData.other.fixCover.text[0]);
+                }
+            }
+            if (GM_config.get('showCoverSize') === true) {
+                const image = new Image;
 
-            image.src = coverData.url['blob'][id];
-            image.onload = function () {
-                element.parent().children('.cover-size').removeClass('hidden').html(`<p>${image.width}x${image.height}</p>`);
-            };
-
-            element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.url['c.bookwalker.jp'][id]}">${coverData.url['c.bookwalker.jp'][id].replace(/https:\/\/c.bookwalker.jp\/coverImage_/gi, '')}</a>`);
-
-            coverFixElement.removeClass('hidden');
-            if (coverFixElement.children('p').text() === buttonData.other.fixCover.text[2]) {
-                coverFixElement.children('p').text(buttonData.other.fixCover.text[1]);
-            } else if (coverFixElement.children('p').text() === buttonData.other.fixCover.text[3]) {
-                coverFixElement.children('p').text(buttonData.other.fixCover.text[0]);
+                image.src = coverData.url['blob'][id];
+                image.onload = function () {
+                    element.parent().children('.cover-size').removeClass('hidden').html(`<p>${image.width}x${image.height}</p>`);
+                };
+            }
+            if (GM_config.get('showCoverURL') === true) {
+                element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.url['c.bookwalker.jp'][id]}">${coverData.url['c.bookwalker.jp'][id].replace(/https:\/\/c.bookwalker.jp\/coverImage_/gi, '')}</a>`);
             }
         }
         function displayProgress(element, percent, status) {
@@ -404,8 +442,8 @@
         function saveCoversAsJPEG() {
             busyDownloading = false;
 
-            if (coverData.selected.length > 5) {
-                if (confirm('You are about to save more than 5 covers ONE BY ONE!')) {
+            if (coverData.selected.length > GM_config.get('saveAsJPEGConfirm') && GM_config.get('saveAsJPEGConfirm') > 0) {
+                if (confirm(`You are about to save more than ${GM_config.get('saveAsJPEGConfirm')} covers ONE BY ONE!`)) {
                     execute();
                 }
             } else {
