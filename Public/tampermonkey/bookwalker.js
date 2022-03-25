@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.7.1
+// @version      0.7.2
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -32,9 +32,15 @@
         'id': 'bookwalker-cover-downloader-config',
         'title': 'BookWalker Cover Downloader Settings',
         'fields': {
+            'downloadOnLoad': {
+                'label': 'Automatic download',
+                'section': ['General', '<hr>'],
+                'type': 'checkbox',
+                'title': 'Download all covers automatically when you open the page.',
+                'default': false
+            },
             'maxConcurrentDownloads': {
                 'label': 'Maximum concurrent downloads:',
-                'section': ['General', '<hr>'],
                 'type': 'int',
                 'title': 'Maximum number of covers to download at the same time. min=1, max=64.',
                 'min': 1,
@@ -196,6 +202,11 @@
             <progress class="bookwalker-cover-downloader download-progress progress-bar" max="100" value="0"></progress>
             <p class="bookwalker-cover-downloader download-progress progress-percent"></p>
         `);
+
+        if (GM_config.get('downloadOnLoad') === true) {
+            coverData.image.each(i => selectCover($(coverData.image[i])));
+            coverData.image.each(i => selectCover($(coverData.image[i]), false));
+        }
 
         function displayError(message) {
             const errorContainer = $('#bookwalker-cover-downloader-errors');
