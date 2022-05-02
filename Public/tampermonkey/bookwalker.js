@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.8
+// @version      0.8.1
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -10,6 +10,7 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip-utils/0.1.0/jszip-utils.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @updateURL    https://raw.githubusercontent.com/RolerGames/UserScripts/master/Public/tampermonkey/bookwalker.js
 // @downloadURL  https://raw.githubusercontent.com/RolerGames/UserScripts/master/Public/tampermonkey/bookwalker.js
@@ -30,11 +31,11 @@
     let needsReload = false;
     GM_config.init({
         'id': 'bookwalker-cover-downloader-config',
-        'title': 'BookWalker Cover Downloader Settings',
+        'title': 'BookWalker Cover Downloader',
         'fields': {
             'downloadOnLoad': {
                 'label': 'Automatic download',
-                'section': ['General', '<hr>'],
+                'section': ['Download Settings', '<hr>'],
                 'type': 'checkbox',
                 'title': 'Download all covers automatically when you open the page.',
                 'default': false
@@ -55,30 +56,22 @@
                 'max': 16,
                 'default': 4
             },
-            'saveAsJPEGConfirm': {
-                'label': 'Confirm saving as JPEG if the number of selected covers is bigger than:',
-                'type': 'int',
-                'title': '(0 = disabled) Confirm saving as JPEG if the number of selected covers is bigger. min=0, max=64.',
-                'min': 0,
-                'max': 64,
-                'default': 0
+            'saveAsJPEGSeriesFolder': {
+                'label': 'Save JPEGs inside a series folder.',
+                'type': 'checkbox',
+                'title': 'Save JPEGs inside a folder (inside the JPEG save location) named as the series title.',
+                'default': true
             },
             'saveAsJPEGLocation': {
                 'label': 'JPEG save location:',
                 'type': 'text',
-                'title': 'Folder (inside the default download folder) in which the covers will be saved when saving as JPEG.',
+                'title': 'Folder (inside the default download folder) in which the covers will be saved as JPEG.',
                 'size': 128,
                 'default': 'Cover Art/BookWalker/JPEG/'
             },
-            'saveAsZIPLocation': {
-                'label': 'ZIP save location:',
-                'type': 'text',
-                'title': 'Folder (inside the default download folder) in which the covers will be saved when saving as ZIP.',
-                'size': 128,
-                'default': 'Cover Art/BookWalker/ZIP/'
-            },
             'replaceCover': {
                 'label': 'Replace cover',
+                'section': ['UI Settings', '<hr>'],
                 'type': 'checkbox',
                 'title': 'Replace the existing cover with the new one.',
                 'default': true
@@ -103,7 +96,7 @@
             },
             'redirectSeriesPages': {
                 'label': 'Redirect the series page to list',
-                'section': ['BookWalker Japan', 'https://bookwalker.jp/'],
+                'section': ['BookWalker Japan Settings', 'https://bookwalker.jp/'],
                 'type': 'checkbox',
                 'title': 'Redirect the /series/ page to the /series/*/list/ page.',
                 'default': false
@@ -218,8 +211,8 @@
         `);
 
         if (GM_config.get('downloadOnLoad') === true) {
-            coverData.image.each(i => selectCover($(coverData.image[i])));
-            coverData.image.each(i => selectCover($(coverData.image[i]), false));
+            coverData.image.each((i, element) => selectCover($(element)));
+            coverData.image.each((i, element) => selectCover($(element), false));
         }
 
         function displayError(message) {
@@ -282,6 +275,20 @@
                 coverData.selected = $('.bookwalker-cover-downloader.cover-selected');
             }
         }
+        async function readyToDownload() {
+            return await new Promise(resolve => {
+                checkDownloads();
+
+                function checkDownloads() {
+                    if (concurrentDownloads.count < concurrentDownloads.max) {
+                        ++concurrentDownloads.count;
+                        resolve(true);
+                    } else {
+                        setTimeout(checkDownloads, 400);
+                    }
+                }
+            });
+        }
         function getBestQualityCover(element, url) {
             const id = element.attr('id');
             const retry403 = {
@@ -293,20 +300,6 @@
             displayProgress(element.parent().children('.download-progress'), 0, 'Downloading cover...');
             readyToDownload().then(() => {getAJAX(url)});
 
-            async function readyToDownload() {
-                return await new Promise(resolve => {
-                    checkDownloads();
-
-                    function checkDownloads() {
-                        if (concurrentDownloads.count < concurrentDownloads.max) {
-                            ++concurrentDownloads.count;
-                            resolve(true);
-                        } else {
-                            setTimeout(checkDownloads, 400);
-                        }
-                    }
-                });
-            }
             function getAJAX(url) {
                 GM_xmlhttpRequest({
                     method: 'GET',
@@ -467,30 +460,31 @@
         function saveCoversAsJPEG() {
             busyDownloading = false;
 
-            if (coverData.selected.length > GM_config.get('saveAsJPEGConfirm') && GM_config.get('saveAsJPEGConfirm') > 0) {
-                if (confirm(`You are about to save more than ${GM_config.get('saveAsJPEGConfirm')} covers as JPEG!`)) {
-                    execute();
-                }
-            } else {
-                execute();
-            }
+            coverData.selected.each(saveCover);
 
-            function execute() {
-                coverData.selected.each(saveCover);
+            function saveCover(i, element) {
+                const id = $(element).attr('id');
+                const blobUrl = coverData.url['blob'][id];
+                const blobName = coverData.name[id];
 
-                function saveCover(i, element) {
-                    const id = $(element).attr('id');
-                    const blobUrl = coverData.url['blob'][id];
-                    const blobName = coverData.name[id];
+                readyToDownload().then(save);
 
-
+                function save() {
                     GM_download({
                         url: blobUrl,
-                        name:  GM_config.get('saveAsJPEGLocation') + blobName + coverData.extension,
+                        name: GM_config.get('saveAsJPEGSeriesFolder') ? GM_config.get('saveAsJPEGLocation') + titleSection.replace(saveAsNameRegex, '') + '/' + blobName + coverData.extension : GM_config.get('saveAsJPEGLocation') + blobName + coverData.extension,
                         saveAs: false,
-                        onerror: (rspObj) => displayError(`${rspObj.status} ${rspObj.statusText} ${blobName} ${blobUrl}`),
-                        ontimeout: (rspObj) => displayError(`${rspObj.status} ${rspObj.statusText} ${blobName} ${blobUrl}`)
+                        onload: GM_downloadonload,
+                        onerror: GM_downloadonerror,
+                        ontimeout: GM_downloadonerror
                     });
+                }
+                function GM_downloadonload() {
+                    --concurrentDownloads.count;
+                }
+                function GM_downloadonerror(rspObj) {
+                    --concurrentDownloads.count;
+                    displayError(`${rspObj.status} ${rspObj.statusText} ${blobName} ${blobUrl}`);
                 }
             }
         }
@@ -504,16 +498,9 @@
                 displayProgress(button.children('a').children('.download-progress'), metaconfig.percent, 'Zipping covers...');
             })
                 .then(function callback(blob) {
-                    const blobUrl = window.URL.createObjectURL(blob);
                     const blobName = titleSection.replace(saveAsNameRegex, '');
 
-                    GM_download({
-                        url:  blobUrl,
-                        name:  GM_config.get('saveAsZIPLocation') + blobName + '.zip',
-                        saveAs: false,
-                        onerror: (rspObj) => displayError(`${rspObj.status} ${rspObj.statusText} ${blobName} ${blobUrl}`),
-                        ontimeout: (rspObj) => displayError(`${rspObj.status} ${rspObj.statusText} ${blobName} ${blobUrl}`)
-                    });
+                    saveAs(blob, blobName + '.zip');
 
                     busyDownloading = false;
                     displayProgress(button.children('a').children('.download-progress'), 100);
