@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.8.1
+// @version      0.8.2
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -59,8 +59,14 @@
             'saveAsJPEGSeriesFolder': {
                 'label': 'Save JPEGs inside a series folder.',
                 'type': 'checkbox',
-                'title': 'Save JPEGs inside a folder (inside the JPEG save location) named as the series title.',
-                'default': true
+                'title': 'Save JPEGs inside a folder (inside the JPEG save location) named as the series title (Chromium browsers might not support this).',
+                'default': false
+            },
+            'SaveAsJPEGLocationCheckbox': {
+                'label': 'JPEG save location',
+                'type': 'checkbox',
+                'title': 'Enable/Disable the JPEG save location (Chromium browsers might not support it).',
+                'default': false
             },
             'saveAsJPEGLocation': {
                 'label': 'JPEG save location:',
@@ -466,13 +472,15 @@
                 const id = $(element).attr('id');
                 const blobUrl = coverData.url['blob'][id];
                 const blobName = coverData.name[id];
+                const saveAsJPEGSeriesFolder = GM_config.get('saveAsJPEGSeriesFolder') ? titleSection.replace(saveAsNameRegex, '') + '/':'';
+                const SaveAsJPEGLocation = GM_config.get('SaveAsJPEGLocationCheckbox') ? GM_config.get('saveAsJPEGLocation'):'';
 
                 readyToDownload().then(save);
 
                 function save() {
                     GM_download({
                         url: blobUrl,
-                        name: GM_config.get('saveAsJPEGSeriesFolder') ? GM_config.get('saveAsJPEGLocation') + titleSection.replace(saveAsNameRegex, '') + '/' + blobName + coverData.extension : GM_config.get('saveAsJPEGLocation') + blobName + coverData.extension,
+                        name: SaveAsJPEGLocation + saveAsJPEGSeriesFolder + blobName + coverData.extension,
                         saveAs: false,
                         onload: GM_downloadonload,
                         onerror: GM_downloadonerror,
