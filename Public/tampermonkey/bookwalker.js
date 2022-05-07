@@ -249,7 +249,7 @@
             console.error(message);
         }
         function addCoverData(i, element) {
-            const id = !$(element).parent().attr('data-uuid') ? $(element).parent().parent().children('a').attr('href').split(':WISH:')[1]:$(element).parent().attr('data-uuid');
+            const id = !$(element).parent().attr('data-uuid') ? $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, ''):$(element).parent().attr('data-uuid');
             coverData.cover[id] = {
                 blob: {},
                 [coverData.source[1]]: {},
