@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.9-dev
+// @version      0.9
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -37,8 +37,17 @@
                 'label': 'Download source:',
                 'section': ['Download Settings', '<hr>'],
                 'type': 'select',
+                'title': 'The source to downloaded the covers from. Automatic compares both sources and downloads from the higher quality one. viewer-epubs-trial.bookwalker.jp doesn\'t work with a paid or free book unless it has a preview.',
                 'options': ['Automatic', 'c.bookwalker.jp', 'viewer-epubs-trial.bookwalker.jp'],
                 'default': 'Automatic'
+            },
+            'downloadPage': {
+                'label': 'Download preview page:',
+                'type': 'int',
+                'title': '(0 = cover) The page to download from the preview (viewer-epubs-trial.bookwalker.jp). min=0, max=4.',
+                'min': 0,
+                'max': 4,
+                'default': 0
             },
             'downloadOnLoad': {
                 'label': 'Automatic download',
@@ -166,7 +175,9 @@
     }
     function bookwalkerCoverDownloader(dataAttribute, titleSection, coverSection, buttonData = {tag: '', class: ''}, css) {
         const config = {};
-        getConfig();
+        $.each(bookwalkerConfig.fields, (i) => {
+            config[i] = GM_config.get(i)
+        });
         const concurrentDownloads = {
             max: config.maxConcurrentDownloads,
             count: 0
@@ -186,17 +197,17 @@
             downloadAsJpeg: {
                 id: 'bookwalker-cover-downloader-download-as-jpeg',
                 text: ['Save Selected Covers as JPEG'],
-                execute(button) {saveCovers(saveCoversAsJPEG, button)}
+                execute: (button) => saveCovers(saveCoversAsJPEG, button)
             },
             downloadAsZip: {
                 id: 'bookwalker-cover-downloader-download-as-zip',
                 text: ['Save Selected Covers as ZIP'],
-                execute(button) {saveCovers(saveCoversAsZIP, button)}
+                execute: (button) => saveCovers(saveCoversAsZIP, button)
             },
             selectAll: {
                 id: 'bookwalker-cover-downloader-select-all',
                 text: ['Select All', 'Deselect All'],
-                execute(button) {selectAllCovers(button)}
+                execute: (button) => selectAllCovers(button)
             }
         }
         buttonData.other = {
@@ -222,18 +233,13 @@
             <p class="bookwalker-cover-downloader download-progress progress-percent"></p>
         `);
 
-        coverData.image.each(getCoverUrls);
+        coverData.image.each(getCoverUrl);
 
         if (config.downloadOnLoad === true) {
             coverData.image.each((i, element) => selectCover($(element)));
             coverData.image.each((i, element) => selectCover($(element), false));
         }
 
-        function getConfig() {
-            for (let i in bookwalkerConfig.fields) {
-                config[i] = GM_config.get(i);
-            }
-        }
         function displayError(message) {
             const container = $('#bookwalker-cover-downloader-errors');
 
@@ -313,7 +319,7 @@
                 }
             });
         }
-        function AJAXRequest(url, type, fn, element, status) {
+        function AJAXRequest(url, type, fn, element, status, source) {
             displayProgress(element.parent().children('.download-progress'), 0, status);
             readyToDownload().then(get);
 
@@ -334,36 +340,35 @@
             }
             function onLoad(rspObj) {
                 --concurrentDownloads.count;
+                displayProgress(element.parent().children('.download-progress'), 100);
                 fn(rspObj);
             }
-            function reportError(rspObj) {
+            function reportError() {
+                const id = element.attr('id');
+
                 --concurrentDownloads.count;
+                coverData.cover[id][source].urlStatus = false;
                 displayProgress(element.parent().children('.download-progress'), 100);
-                displayError(`${rspObj.status} ${rspObj.statusText} ${coverData.cover[id].title} ${rspObj.finalUrl}`);
             }
         }
-        function getCoverUrls(i, element) {
+        function getCoverUrl(i, element) {
             const id = $(element).attr('id');
             const getUrl = {
-                get: (url, fn) => AJAXRequest(url, 'json', fn, $(element), 'Getting cover URL...')
+                get: (url, fn, source) => AJAXRequest(url, 'json', fn, $(element), 'Getting cover URL...', source)
             }
 
             getUrl[coverData.source[1]] = function() {
                 coverData.cover[id][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}${coverData.extension}`;
-                coverData.cover[id][coverData.source[1]].urlStatus = true;
             }
             getUrl[coverData.source[2]] = function() {
-                coverData.cover[id][coverData.source[2]].urlStatus = true;
-
-                getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${id}&BID=0`, getAuthInfo);
+                getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${id}&BID=0`, getAuthInfo, coverData.source[2]);
 
                 function getAuthInfo(rspObj) {
-                    try {
-                        if (rspObj.status !== 200) {
-                            displayError(`${rspObj.status} ${rspObj.statusText} ${coverData.cover[id].title} ${rspObj.finalUrl}`);
-                        }
+                    const rspObjData = rspObj.response;
 
-                        const rspObjData = rspObj.response
+                    if (rspObj.status !== 200 || rspObjData.status !== '200') {
+                        coverData.cover[id][coverData.source[2]].urlStatus = false;
+                    } else {
                         const rspUrl = rspObjData.url;
                         const cty = rspObjData.cty;
                         const rspPfCd = rspObjData.auth_info['pfCd'];
@@ -372,39 +377,45 @@
                         const rspKeyPairId = rspObjData.auth_info['Key-Pair-Id'];
                         const configPath = cty === 0 ? 'normal_default/configuration_pack.json':'configuration_pack.json';
 
-                        getUrl.get(`${rspUrl}${configPath}?pfCd=${rspPfCd}&Policy=${rspPolicy}&Signature=${rspSignature}&Key-Pair-Id=${rspKeyPairId}`, getMetadata);
+                        getUrl.get(`${rspUrl}${configPath}?pfCd=${rspPfCd}&Policy=${rspPolicy}&Signature=${rspSignature}&Key-Pair-Id=${rspKeyPairId}`, getMetadata, coverData.source[2]);
 
                         function getMetadata(rspObj) {
                             if (rspObj.status !== 200) {
-                                displayError(`${rspObj.status} ${rspObj.statusText} ${coverData.cover[id].title} ${rspObj.finalUrl}`);
+                                coverData.cover[id][coverData.source[2]].urlStatus = false;
+                            } else {
+                                const rspContents = rspObj.response.configuration.contents[config.downloadPage];
+                                const rspInfoSize = rspObj.response[rspContents.file].FileLinkInfo.PageLinkInfoList[0].Page.Size;
+                                const filePath = rspContents.file.replace(/\.\.\//, '');
+                                coverData.cover[id][coverData.source[2]].filePath = filePath;
+                                coverData.cover[id][coverData.source[2]].width = rspInfoSize.Width;
+                                coverData.cover[id][coverData.source[2]].height = rspInfoSize.Height;
+                                coverData.cover[id][coverData.source[2]].url = `${rspUrl}${filePath}/0.${rspContents.type}?Policy=${rspPolicy}&Signature=${rspSignature}&Key-Pair-Id=${rspKeyPairId}`;
                             }
-
-                            const rspContents = rspObj.response.configuration.contents[0];
-                            const rspInfoSize = rspObj.response[rspContents.file].FileLinkInfo.PageLinkInfoList[0].Page.Size;
-                            const filePath = rspContents.file.replace(/\.\.\//, '');
-                            coverData.cover[id][coverData.source[2]].filePath = filePath;
-                            coverData.cover[id][coverData.source[2]].width = rspInfoSize.Width;
-                            coverData.cover[id][coverData.source[2]].height = rspInfoSize.Height;
-
-                            coverData.cover[id][coverData.source[2]].url = `${rspUrl}${filePath}/0.${rspContents.type}?Policy=${rspPolicy}&Signature=${rspSignature}&Key-Pair-Id=${rspKeyPairId}`;
-
-                            console.log(`${coverData.cover[id][coverData.source[2]].width}x${coverData.cover[id][coverData.source[2]].height}`);
-                            console.log(coverData.cover[id][coverData.source[2]].url);
                         }
-                    } catch (e) {
-                        coverData.cover[id][coverData.source[2]].urlStatus = false;
-                        displayProgress($(element).parent().children('.download-progress'), 100);
                     }
                 }
             }
 
             if (config.downloadSource === coverData.source[0]) {
-                getUrl[coverData.source[1]]();
-                getUrl[coverData.source[2]]();
-            } else if (config.downloadSource === coverData.source[1]) {
-                getUrl[coverData.source[1]]();
-            } else if (config.downloadSource === coverData.source[2]) {
-                getUrl[coverData.source[2]]();
+                $.each(coverData.source, (i, source) => {
+                    if (i !== 0) {
+                        try {
+                            coverData.cover[id][source].urlStatus = true;
+
+                            getUrl[source]();
+                        } catch (e) {
+                            coverData.cover[id][source].urlStatus = false;
+                        }
+                    }
+                });
+            } else {
+                try {
+                    coverData.cover[id][config.downloadSource].urlStatus = true;
+
+                    getUrl[config.downloadSource]();
+                } catch (e) {
+                    coverData.cover[id][config.downloadSource].urlStatus = false;
+                }
             }
         }
         function getBestQualityCover(element) {
@@ -414,17 +425,15 @@
                 count: 0
             }
             const getCover = {
-                get: (url, fn) => AJAXRequest(url, 'blob', fn, element, 'Downloading cover...')
+                get: (url, fn, source) => AJAXRequest(url, 'blob', fn, element, 'Downloading cover...', source)
             }
             coverData.cover[id].clicked = true;
 
             getCover[coverData.source[1]] = function(rspObj) {
-                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/g)) {
-                    displayError(`${rspObj.status} ${rspObj.statusText} ${coverData.cover[id].title} ${rspObj.finalUrl}`);
-                }
-
-                if (rspObj.status === 403 && retry403.count < retry403.max) {
-                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, '') - 1))}${coverData.extension}`, getCover[coverData.source[1]]);
+                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/i)) {
+                    coverData.cover[id][coverData.source[1]].urlStatus = false;
+                } else if (rspObj.status === 403 && retry403.count < retry403.max) {
+                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, '') - 1))}${coverData.extension}`, getCover[coverData.source[1]], coverData.source[1]);
                     ++retry403.count;
                 } else {
                     const blobUrl = window.URL.createObjectURL(rspObj.response);
@@ -440,45 +449,44 @@
             }
             getCover[coverData.source[2]] = function(rspObj) {
                 if (rspObj.status !== 200) {
-                    displayError(`${rspObj.status} ${rspObj.statusText} ${coverData.cover[id].title} ${rspObj.finalUrl}`);
+                    coverData.cover[id][coverData.source[2]].urlStatus = false;
+                } else {
+                    coverData.cover[id][coverData.source[2]].url = rspObj.finalUrl;
+                    coverData.cover[id][coverData.source[2]].blobUrl = window.URL.createObjectURL(rspObj.response);
                 }
-
-                coverData.cover[id][coverData.source[2]].url = rspObj.finalUrl;
-                coverData.cover[id][coverData.source[2]].blobUrl = window.URL.createObjectURL(rspObj.response);
             }
 
             if (config.downloadSource === coverData.source[0]) {
                 download(coverData.source[1], function(source, url) {
-                    const source1 = source;
-
-                    displayProgress(element.parent().children('.download-progress'), 0, 'Downloading cover...');
+                    const source1 = coverData.source[1];
+                    const source2 = coverData.source[2];
 
                     if (url === false) {
-                        setCover(coverData.source[2]);
+                        download(source2);
                     } else {
-                        download(coverData.source[2], function(source, url) {
-                            const source2 = source;
-
+                        promiseUrl(source2, 'url').then((url) => {
                             if (url === false) {
                                 setCover(source1);
                             } else {
                                 if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
-                                    if (coverData.cover[id][coverData.source[1]].width === 964 && coverData.cover[id][coverData.source[1]].height === 1200) {
-                                        setCover(source2);
+                                    if (coverData.cover[id][source1].width * coverData.cover[id][source1].height - coverData.cover[id][source2].width * coverData.cover[id][source2].height === 144000
+                                        && coverData.cover[id][source1].height === 1200
+                                        && coverData.cover[id][source2].height === 1200
+                                        && coverData.cover[id][source1].width <= 964
+                                        && coverData.cover[id][source2].width <= 844) {
+                                        download(source2);
                                     } else {
                                         setCover(source1);
                                     }
                                 } else if (coverData.cover[id][source1].width * coverData.cover[id][source1].height < coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
-                                    setCover(source2);
+                                    download(source2);
                                 }
                             }
                         });
                     }
                 });
-            } else if (config.downloadSource === coverData.source[1]) {
-                download(coverData.source[1]);
-            } else if (config.downloadSource === coverData.source[2]) {
-                download(coverData.source[2]);
+            } else {
+                download(config.downloadSource);
             }
 
             function download(source, fn = setCover) {
@@ -486,23 +494,22 @@
                     if (url === false) {
                         fn(source, url);
                     } else {
-                        getCover.get(url, getCover[source]);
-                        promiseUrl(source, 'blobUrl').then(() => fn(source, url));
+                        getCover.get(url, getCover[source], source);
+                        promiseUrl(source, 'blobUrl').then((url) => fn(source, url));
                     }
                 });
             }
             function setCover(source, url) {
                 if (url === false) {
-                    coverData.cover[id].blob.url = 'https://c.bookwalker.jp/coverImage_5051842.jpg';
-                    displayError(`Failed to get cover from ${source}`);
+                    coverData.cover[id].blob.url = 'https://bookwalker.jp/favicon.ico';
+                    displayError(`Failed to get ${coverData.cover[id].title} from ${source}`);
                 } else {
                     coverData.cover[id].blob.url = coverData.cover[id][source].blobUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id][source].url;
                     coverData.cover[id].blob.width = coverData.cover[id][source].width;
                     coverData.cover[id].blob.height = coverData.cover[id][source].height;
-                    displayCover(element, id);
                 }
-                displayProgress(element.parent().children('.download-progress'), 100);
+                displayCover(element, id);
             }
             async function promiseUrl(source, url) {
                 return await new Promise((resolve) => {
@@ -523,12 +530,12 @@
             }
         }
         function displayCover(element, id) {
-            const fixElement = element.parent().children('.cover-fix');
-
             if (config.replaceCover === true) {
                 element.attr(dataAttribute, coverData.cover[id].blob.url).attr('src', coverData.cover[id].blob.url).attr('srcset', coverData.cover[id].blob.url);
             }
-            if (config.showTryToFix === true && coverData.cover[id][coverData.source[1]].url === coverData.cover[id].blob.coverUrl || config.showTryToFix === true && fixElement.children('p').text() === buttonData.other.fixCover.text[1] || config.showTryToFix === true && fixElement.children('p').text() === buttonData.other.fixCover.text[2] || config.showTryToFix === true && fixElement.children('p').text() === buttonData.other.fixCover.text[3]) {
+            if (config.showTryToFix === true && config.downloadSource === coverData.source[0] || config.showTryToFix === true && config.downloadSource === coverData.source[1]) {
+                const fixElement = element.parent().children('.cover-fix');
+                
                 fixElement.removeClass('hidden');
                 if (fixElement.children('p').text() === buttonData.other.fixCover.text[2]) {
                     fixElement.children('p').text(buttonData.other.fixCover.text[1]);
@@ -542,7 +549,7 @@
             if (config.showCoverURL === true) {
                 const text = coverData.cover[id][coverData.source[1]].url === coverData.cover[id].blob.coverUrl ? coverData.cover[id][coverData.source[1]].url:coverData.cover[id][coverData.source[2]].filePath
 
-                element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}">${text.replace(/(.*?)(?=[^\/]*$)/i, '')}</a>`);
+                element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}">${text.replace(/(.*?)(?=[^\/]*$)/i, '').replace('coverImage_', '')}</a>`);
             }
         }
         function displayProgress(element, percent, status) {
@@ -562,6 +569,7 @@
                 const currentElement = $(element.currentTarget);
                 const imgElement = currentElement.parent().parent().children('img');
                 const imgElementId = imgElement.attr('id');
+                coverData.cover[imgElementId][coverData.source[1]].urlStatus = true;
                 window.URL.revokeObjectURL(coverData.cover[imgElementId].blob.url);
                 window.URL.revokeObjectURL(coverData.cover[imgElementId][coverData.source[1]].blobUrl);
                 delete coverData.cover[imgElementId].blob.url;
@@ -740,8 +748,6 @@
                 }
             }
         }
-
-        setInterval(function() {console.log(concurrentDownloads.count)}, checkTimeout)
 
         GM_addStyle (css + `
             .bookwalker-cover-downloader.hidden {
