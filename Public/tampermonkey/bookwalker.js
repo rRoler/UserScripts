@@ -358,7 +358,11 @@
             }
 
             getUrl[coverData.source[1]] = function() {
-                coverData.cover[id][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}${coverData.extension}`;
+                const url = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}${coverData.extension}`;
+                const filePath = url.replace(/https:\/\//);
+
+                coverData.cover[id][coverData.source[1]].url = url;
+                coverData.cover[id][coverData.source[1]].filePath = filePath;
             }
             getUrl[coverData.source[2]] = function() {
                 getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${id}&BID=0`, getAuthInfo, coverData.source[2]);
@@ -466,7 +470,7 @@
                     } else {
                         promiseUrl(source2, 'url').then((url) => {
                             if (url === false) {
-                                setCover(source1);
+                                setCover(source1, coverData.cover[id][source1].urlStatus);
                             } else {
                                 if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
                                     if (coverData.cover[id][source1].width * coverData.cover[id][source1].height - coverData.cover[id][source2].width * coverData.cover[id][source2].height === 144000
@@ -476,7 +480,7 @@
                                         && coverData.cover[id][source2].width <= 844) {
                                         download(source2);
                                     } else {
-                                        setCover(source1);
+                                        setCover(source1, coverData.cover[id][source1].urlStatus);
                                     }
                                 } else if (coverData.cover[id][source1].width * coverData.cover[id][source1].height < coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
                                     download(source2);
@@ -501,11 +505,17 @@
             }
             function setCover(source, url) {
                 if (url === false) {
-                    coverData.cover[id].blob.url = 'https://bookwalker.jp/favicon.ico';
+                    const errorImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFAAH/F1FwBgAAAABJRU5ErkJggg==';
+                    coverData.cover[id].blob.url = errorImage;
+                    coverData.cover[id].blob.coverUrl = errorImage;
+                    coverData.cover[id].blob.filePath = 'Failed to get cover';
+                    coverData.cover[id].blob.width = 0;
+                    coverData.cover[id].blob.height = 0;
                     displayError(`Failed to get ${coverData.cover[id].title} from ${source}`);
                 } else {
                     coverData.cover[id].blob.url = coverData.cover[id][source].blobUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id][source].url;
+                    coverData.cover[id].blob.filePath = coverData.cover[id][source].filePath;
                     coverData.cover[id].blob.width = coverData.cover[id][source].width;
                     coverData.cover[id].blob.height = coverData.cover[id][source].height;
                 }
@@ -547,9 +557,7 @@
                 element.parent().children('.cover-size').removeClass('hidden').html(`<p>${coverData.cover[id].blob.width}x${coverData.cover[id].blob.height}</p>`);
             }
             if (config.showCoverURL === true) {
-                const text = coverData.cover[id][coverData.source[1]].url === coverData.cover[id].blob.coverUrl ? coverData.cover[id][coverData.source[1]].url:coverData.cover[id][coverData.source[2]].filePath
-
-                element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}">${text.replace(/(.*?)(?=[^\/]*$)/i, '').replace('coverImage_', '')}</a>`);
+                element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}">${coverData.cover[id].blob.filePath.replace(/(.*?)(?=[^\/]*$)/i, '').replace('coverImage_', '')}</a>`);
             }
         }
         function displayProgress(element, percent, status) {
