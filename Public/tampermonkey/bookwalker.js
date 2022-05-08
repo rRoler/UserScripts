@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.9.1
+// @version      0.9.2
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -578,8 +578,6 @@
                 const imgElement = currentElement.parent().parent().children('img');
                 const imgElementId = imgElement.attr('id');
                 coverData.cover[imgElementId][coverData.source[1]].urlStatus = true;
-                window.URL.revokeObjectURL(coverData.cover[imgElementId].blob.url);
-                window.URL.revokeObjectURL(coverData.cover[imgElementId][coverData.source[1]].blobUrl);
                 delete coverData.cover[imgElementId].blob.url;
                 delete coverData.cover[imgElementId][coverData.source[1]].blobUrl;
 
