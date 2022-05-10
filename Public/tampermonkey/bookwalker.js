@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.9.2
+// @version      0.9.3
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -44,9 +44,9 @@
             'downloadPage': {
                 'label': 'Download preview page:',
                 'type': 'int',
-                'title': '(0 = cover) The page to download from the preview (viewer-epubs-trial.bookwalker.jp). min=0, max=4.',
+                'title': '(0 = cover) The page to download from the preview (viewer-epubs-trial.bookwalker.jp). min=0, max=8.',
                 'min': 0,
-                'max': 4,
+                'max': 8,
                 'default': 0
             },
             'downloadOnLoad': {
@@ -58,10 +58,10 @@
             'maxConcurrentDownloads': {
                 'label': 'Maximum concurrent downloads:',
                 'type': 'int',
-                'title': 'Maximum number of covers to download at the same time. min=1, max=64.',
+                'title': 'Maximum number of covers to download at the same time. min=1, max=128.',
                 'min': 1,
-                'max': 64,
-                'default': 64
+                'max': 128,
+                'default': 128
             },
             'max403Retries': {
                 'label': 'Maximum download retries:',
@@ -110,9 +110,9 @@
                 'default': true
             },
             'showCoverURL': {
-                'label': 'Show cover URL',
+                'label': 'Show cover hyperlink',
                 'type': 'checkbox',
-                'title': 'Show the URL of the new cover.',
+                'title': 'Show a hyperlink to the new cover.',
                 'default': true
             },
             'redirectSeriesPages': {
@@ -124,12 +124,12 @@
             }
         },
         'events': {
-            'save': function() {needsReload = true},
-            'close': reloadPage
+            'save': () => needsReload = true,
+            'close': () => needsReload === true ? location.reload():false
         }
     }
     GM_config.init(bookwalkerConfig);
-    GM_registerMenuCommand('Settings', function() {GM_config.open()});
+    GM_registerMenuCommand('Settings', () => GM_config.open());
 
     if (window.location.href.search(/https:\/\/bookwalker.jp\/series\/.*/gi) > -1) {
         if (window.location.href.search(/https:\/\/.*\/series\/.*\/list\/.*/gi) <= -1) {
@@ -168,15 +168,10 @@
         `);
     }
 
-    function reloadPage() {
-        if (needsReload === true) {
-            location.reload();
-        }
-    }
     function bookwalkerCoverDownloader(dataAttribute, titleSection, coverSection, buttonData = {tag: '', class: ''}, css) {
         const config = {};
-        $.each(bookwalkerConfig.fields, (i) => {
-            config[i] = GM_config.get(i)
+        $.each(bookwalkerConfig.fields, function (i) {
+            config[i] = GM_config.get(i);
         });
         const concurrentDownloads = {
             max: config.maxConcurrentDownloads,
@@ -249,11 +244,12 @@
             console.error(message);
         }
         function addCoverData(i, element) {
-            const id = !$(element).parent().attr('data-uuid') ? $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, ''):$(element).parent().attr('data-uuid');
+            const id = `bookwalker-cover-downloader-cover-${i}`;
             coverData.cover[id] = {
                 blob: {},
                 [coverData.source[1]]: {},
                 [coverData.source[2]]: {},
+                clickable: true,
                 clicked: false
             }
 
@@ -278,9 +274,9 @@
         }
         function selectCover(element, select = true) {
             if (busyDownloading === false) {
-                if (select === true) {
-                    const id = element.attr('id');
+                const id = element.attr('id');
 
+                if (select === true && coverData.cover[id].clickable === true) {
                     element.addClass('cover-selected');
 
                     if (!coverData.cover[id].clicked || coverData.cover[id].clicked === false) {
@@ -306,7 +302,7 @@
             }
         }
         async function readyToDownload() {
-            return await new Promise(resolve => {
+            return await new Promise(function (resolve) {
                 check();
 
                 function check() {
@@ -339,9 +335,12 @@
                 displayProgress(element.parent().children('.download-progress'), rspObj.loaded / rspObj.total * 100, status);
             }
             function onLoad(rspObj) {
-                --concurrentDownloads.count;
-                displayProgress(element.parent().children('.download-progress'), 100);
-                fn(rspObj);
+                try {
+                    fn(rspObj);
+                } finally {
+                    --concurrentDownloads.count;
+                    displayProgress(element.parent().children('.download-progress'), 100);
+                }
             }
             function reportError() {
                 const id = element.attr('id');
@@ -357,15 +356,17 @@
                 get: (url, fn, source) => AJAXRequest(url, 'json', fn, $(element), 'Getting cover URL...', source)
             }
 
-            getUrl[coverData.source[1]] = function() {
+            getUrl[coverData.source[1]] = function () {
                 const url = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}${coverData.extension}`;
                 const filePath = url.replace(/https:\/\//);
 
                 coverData.cover[id][coverData.source[1]].url = url;
                 coverData.cover[id][coverData.source[1]].filePath = filePath;
             }
-            getUrl[coverData.source[2]] = function() {
-                getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${id}&BID=0`, getAuthInfo, coverData.source[2]);
+            getUrl[coverData.source[2]] = function () {
+                const uuid = !$(element).parent().attr('data-uuid') ? $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, ''):$(element).parent().attr('data-uuid');
+
+                getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${uuid}&BID=0`, getAuthInfo, coverData.source[2]);
 
                 function getAuthInfo(rspObj) {
                     const rspObjData = rspObj.response;
@@ -373,27 +374,46 @@
                     if (rspObj.status !== 200 || rspObjData.status !== '200') {
                         coverData.cover[id][coverData.source[2]].urlStatus = false;
                     } else {
-                        const rspUrl = rspObjData.url;
-                        const cty = rspObjData.cty;
-                        const rspPfCd = rspObjData.auth_info['pfCd'];
-                        const rspPolicy = rspObjData.auth_info['Policy'];
-                        const rspSignature = rspObjData.auth_info['Signature'];
-                        const rspKeyPairId = rspObjData.auth_info['Key-Pair-Id'];
-                        const configPath = cty === 0 ? 'normal_default/configuration_pack.json':'configuration_pack.json';
+                        const book = {
+                            url: `${rspObjData.url}${rspObjData.cty === 0 ? 'normal_default/':''}`
+                        }
+                        const auth = {
+                            pfCd: rspObjData.auth_info['pfCd'],
+                            policy: rspObjData.auth_info['Policy'],
+                            signature: rspObjData.auth_info['Signature'],
+                            keyPairId: rspObjData.auth_info['Key-Pair-Id']
+                        }
+                        auth.string = `?pfCd=${auth.pfCd}&Policy=${auth.policy}&Signature=${auth.signature}&Key-Pair-Id=${auth.keyPairId}`;
 
-                        getUrl.get(`${rspUrl}${configPath}?pfCd=${rspPfCd}&Policy=${rspPolicy}&Signature=${rspSignature}&Key-Pair-Id=${rspKeyPairId}`, getMetadata, coverData.source[2]);
+                        getUrl.get(`${book.url}configuration_pack.json${auth.string}`, getMetadata, coverData.source[2]);
 
                         function getMetadata(rspObj) {
+                            const rspObjData = rspObj.response;
+
                             if (rspObj.status !== 200) {
                                 coverData.cover[id][coverData.source[2]].urlStatus = false;
                             } else {
-                                const rspContents = rspObj.response.configuration.contents[config.downloadPage];
-                                const rspInfoSize = rspObj.response[rspContents.file].FileLinkInfo.PageLinkInfoList[0].Page.Size;
-                                const filePath = rspContents.file.replace(/\.\.\//, '');
-                                coverData.cover[id][coverData.source[2]].filePath = filePath;
-                                coverData.cover[id][coverData.source[2]].width = rspInfoSize.Width;
-                                coverData.cover[id][coverData.source[2]].height = rspInfoSize.Height;
-                                coverData.cover[id][coverData.source[2]].url = `${rspUrl}${filePath}/0.${rspContents.type}?Policy=${rspPolicy}&Signature=${rspSignature}&Key-Pair-Id=${rspKeyPairId}`;
+                                book.chapters = rspObjData.configuration.contents;
+                                book.pages = [];
+                                $.each(book.chapters, function (i, value) {
+                                    const chapter = value;
+                                    $.each(rspObjData[value.file].FileLinkInfo.PageLinkInfoList, function (i, value) {
+                                        const page = value.Page;
+                                        page.chapter = chapter;
+                                        book.pages.push(page);
+                                    });
+                                });
+                                const page = {
+                                    path: book.pages[config.downloadPage].chapter.file,
+                                    number: book.pages[config.downloadPage].No,
+                                    type: book.pages[config.downloadPage].chapter.type,
+                                    size: book.pages[config.downloadPage].Size
+                                }
+                                page.url = `${book.url}${page.path}/${page.number}.${page.type}${auth.string}`;
+                                coverData.cover[id][coverData.source[2]].filePath = page.path;
+                                coverData.cover[id][coverData.source[2]].width = page.size.Width;
+                                coverData.cover[id][coverData.source[2]].height = page.size.Height;
+                                coverData.cover[id][coverData.source[2]].url = page.url;
                             }
                         }
                     }
@@ -401,8 +421,8 @@
             }
 
             if (config.downloadSource === coverData.source[0]) {
-                $.each(coverData.source, (i, source) => {
-                    if (i !== 0) {
+                $.each(coverData.source, function (i, source) {
+                    if (source !== coverData.source[0]) {
                         try {
                             coverData.cover[id][source].urlStatus = true;
 
@@ -433,7 +453,7 @@
             }
             coverData.cover[id].clicked = true;
 
-            getCover[coverData.source[1]] = function(rspObj) {
+            getCover[coverData.source[1]] = function (rspObj) {
                 if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/i)) {
                     coverData.cover[id][coverData.source[1]].urlStatus = false;
                 } else if (rspObj.status === 403 && retry403.count < retry403.max) {
@@ -451,7 +471,7 @@
                     };
                 }
             }
-            getCover[coverData.source[2]] = function(rspObj) {
+            getCover[coverData.source[2]] = function (rspObj) {
                 if (rspObj.status !== 200) {
                     coverData.cover[id][coverData.source[2]].urlStatus = false;
                 } else {
@@ -461,14 +481,14 @@
             }
 
             if (config.downloadSource === coverData.source[0]) {
-                download(coverData.source[1], function(source, url) {
+                download(coverData.source[1], function (source, url) {
                     const source1 = coverData.source[1];
                     const source2 = coverData.source[2];
 
                     if (url === false) {
                         download(source2);
                     } else {
-                        promiseUrl(source2, 'url').then((url) => {
+                        promiseUrl(source2, 'url').then(function (url) {
                             if (url === false) {
                                 setCover(source1, coverData.cover[id][source1].urlStatus);
                             } else {
@@ -494,7 +514,7 @@
             }
 
             function download(source, fn = setCover) {
-                promiseUrl(source, 'url').then((url) => {
+                promiseUrl(source, 'url').then(function (url) {
                     if (url === false) {
                         fn(source, url);
                     } else {
@@ -505,12 +525,13 @@
             }
             function setCover(source, url) {
                 if (url === false) {
-                    const errorImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFAAH/F1FwBgAAAABJRU5ErkJggg==';
-                    coverData.cover[id].blob.url = errorImage;
-                    coverData.cover[id].blob.coverUrl = errorImage;
+                    coverData.cover[id].clickable = false;
+                    coverData.cover[id].blob.url = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFAAH/F1FwBgAAAABJRU5ErkJggg==';
+                    coverData.cover[id].blob.coverUrl = '#';
                     coverData.cover[id].blob.filePath = 'Failed to get cover';
-                    coverData.cover[id].blob.width = 0;
-                    coverData.cover[id].blob.height = 0;
+                    coverData.cover[id].blob.width = 1;
+                    coverData.cover[id].blob.height = 1;
+                    selectCover(element, false);
                     displayError(`Failed to get ${coverData.cover[id].title} from ${source}`);
                 } else {
                     coverData.cover[id].blob.url = coverData.cover[id][source].blobUrl;
@@ -522,7 +543,7 @@
                 displayCover(element, id);
             }
             async function promiseUrl(source, url) {
-                return await new Promise((resolve) => {
+                return await new Promise(function (resolve) {
                     check();
 
                     function check() {
@@ -557,7 +578,7 @@
                 element.parent().children('.cover-size').removeClass('hidden').html(`<p>${coverData.cover[id].blob.width}x${coverData.cover[id].blob.height}</p>`);
             }
             if (config.showCoverURL === true) {
-                element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}">${coverData.cover[id].blob.filePath.replace(/(.*?)(?=[^\/]*$)/i, '').replace('coverImage_', '')}</a>`);
+                element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}">${coverData.cover[id].blob.filePath.replace(/(.*?)(?=[^\/]*$)/i, '').replace(/coverImage_/i, '')}</a>`);
             }
         }
         function displayProgress(element, percent, status) {
@@ -578,6 +599,7 @@
                 const imgElement = currentElement.parent().parent().children('img');
                 const imgElementId = imgElement.attr('id');
                 coverData.cover[imgElementId][coverData.source[1]].urlStatus = true;
+                coverData.cover[imgElementId].clickable = true;
                 delete coverData.cover[imgElementId].blob.url;
                 delete coverData.cover[imgElementId][coverData.source[1]].blobUrl;
 
@@ -626,7 +648,7 @@
             function promiseUrls(i, selectedElement) {
                 const id = $(selectedElement).attr('id');
 
-                return new Promise(resolve => {
+                return new Promise(function (resolve) {
                     check();
 
                     function check() {
@@ -645,7 +667,7 @@
         function saveCovers(fn, button) {
             if (coverData.selected.length > 0 && busyDownloading === false) {
                 try {
-                    coverUrlsCheck(button).then(() => {
+                    coverUrlsCheck(button).then(function () {
                         try {
                             fn(button);
                         } catch (e) {
@@ -721,8 +743,8 @@
                 zip.file(coverData.cover[id].title + coverData.extension, coverToPromise(id), {binary:true});
             }
             function coverToPromise(id) {
-                return new Promise(function(resolve, reject) {
-                    JSZipUtils.getBinaryContent(coverData.cover[id].blob.url, function(error, config) {
+                return new Promise(function (resolve, reject) {
+                    JSZipUtils.getBinaryContent(coverData.cover[id].blob.url, function (error, config) {
                         if (error) {
                             busyDownloading = false;
                             coverData.cover[id].clicked = false;
@@ -742,14 +764,10 @@
                 const buttonTextElement = button.children('a').children('.button-text');
 
                 if (buttonTextElement.text() === buttonData.button.selectAll.text[1]) {
-                    coverData.image.each(function (i, element) {
-                        selectCover($(element), false);
-                    });
+                    coverData.image.each((i, element) => selectCover($(element), false));
                     buttonTextElement.text(buttonData.button.selectAll.text[0]);
                 } else if (buttonTextElement.text() === buttonData.button.selectAll.text[0]) {
-                    coverData.image.each(function (i, element) {
-                        selectCover($(element));
-                    });
+                    coverData.image.each((i, element) => selectCover($(element)));
                     buttonTextElement.text(buttonData.button.selectAll.text[1]);
                 }
             }
@@ -767,7 +785,12 @@
                 color: red;
                 max-height: 60px;
                 overflow-y: scroll;
-                margin: 10px;
+                margin: 16px;
+            }
+            .bookwalker-cover-downloader#bookwalker-cover-downloader-errors > p {
+                border: solid red 1px;
+                border-radius: 4px;
+                margin: 2px;
             }
             img.lazy.bookwalker-cover-downloader {
                 opacity: 0.5;
@@ -784,7 +807,7 @@
                 background-color: rgba(0, 0, 0, 0.50);
                 font-size: 14px;
                 position: absolute;
-                z-index: 1000;
+                z-index: 100;
                 overflow: hidden;
                 white-space: nowrap;
                 border-radius: 4px;
