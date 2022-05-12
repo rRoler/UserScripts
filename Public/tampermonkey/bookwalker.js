@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.9.3
+// @version      0.9.4
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -37,7 +37,7 @@
                 'label': 'Download source:',
                 'section': ['Download Settings', '<hr>'],
                 'type': 'select',
-                'title': 'The source to downloaded the covers from. Automatic compares both sources and downloads from the higher quality one. viewer-epubs-trial.bookwalker.jp doesn\'t work with a paid or free book unless it has a preview.',
+                'title': 'The source to downloaded the covers from. Automatic compares both sources and downloads from the higher quality one. viewer-epubs-trial.bookwalker.jp won\'t work with a paid or free book unless it has a preview.',
                 'options': ['Automatic', 'c.bookwalker.jp', 'viewer-epubs-trial.bookwalker.jp'],
                 'default': 'Automatic'
             },
@@ -52,13 +52,13 @@
             'downloadOnLoad': {
                 'label': 'Automatic download',
                 'type': 'checkbox',
-                'title': 'Download all covers automatically when you open the page.',
+                'title': 'Download all covers automatically when you open the series list page.',
                 'default': false
             },
             'maxConcurrentDownloads': {
                 'label': 'Maximum concurrent downloads:',
                 'type': 'int',
-                'title': 'Maximum number of covers to download at the same time. min=1, max=128.',
+                'title': 'Maximum number of files to download at the same time. min=1, max=128.',
                 'min': 1,
                 'max': 128,
                 'default': 128
@@ -90,6 +90,14 @@
                 'size': 128,
                 'default': 'Cover Art/BookWalker/JPEG/'
             },
+            'saveAsJPEGConfirm': {
+                'label': 'Confirm saving as JPEG if selected covers are more than:',
+                'type': 'int',
+                'title': '(0 = disabled) Ask for confirmation before saving more than this number of covers as JPEG. min=0, max=64.',
+                'min': 0,
+                'max': 64,
+                'default': 0
+            },
             'replaceCover': {
                 'label': 'Replace cover',
                 'section': ['UI Settings', '<hr>'],
@@ -112,14 +120,14 @@
             'showCoverURL': {
                 'label': 'Show cover hyperlink',
                 'type': 'checkbox',
-                'title': 'Show a hyperlink to the new cover.',
+                'title': 'Show a hyperlink that links to the new cover.',
                 'default': true
             },
             'redirectSeriesPages': {
                 'label': 'Redirect the series page to list',
                 'section': ['BookWalker Japan Settings', 'https://bookwalker.jp/'],
                 'type': 'checkbox',
-                'title': 'Redirect the /series/ page to the /series/*/list/ page.',
+                'title': 'Redirect the series pages to the series list pages.',
                 'default': false
             }
         },
@@ -395,13 +403,14 @@
                             } else {
                                 book.chapters = rspObjData.configuration.contents;
                                 book.pages = [];
-                                $.each(book.chapters, function (i, value) {
-                                    const chapter = value;
-                                    $.each(rspObjData[value.file].FileLinkInfo.PageLinkInfoList, function (i, value) {
-                                        const page = value.Page;
-                                        page.chapter = chapter;
-                                        book.pages.push(page);
-                                    });
+                                $.each(book.chapters, function (i, chapter) {
+                                    if (book.pages.length <= config.downloadPage) {
+                                        $.each(rspObjData[chapter.file].FileLinkInfo.PageLinkInfoList, function (i, value) {
+                                            const page = value.Page;
+                                            page.chapter = chapter;
+                                            book.pages.push(page);
+                                        });
+                                    }
                                 });
                                 const page = {
                                     path: book.pages[config.downloadPage].chapter.file,
@@ -532,7 +541,7 @@
                     coverData.cover[id].blob.width = 1;
                     coverData.cover[id].blob.height = 1;
                     selectCover(element, false);
-                    displayError(`Failed to get ${coverData.cover[id].title} from ${source}`);
+                    displayError(`Failed to get the cover of ${coverData.cover[id].title} from ${source}`);
                 } else {
                     coverData.cover[id].blob.url = coverData.cover[id][source].blobUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id][source].url;
@@ -685,7 +694,13 @@
         function saveCoversAsJPEG() {
             busyDownloading = false;
 
-            coverData.selected.each(save);
+            if (coverData.selected.length > config.saveAsJPEGConfirm && config.saveAsJPEGConfirm > 0) {
+                if (confirm(`You are about to save more than ${config.saveAsJPEGConfirm} covers!`)) {
+                    coverData.selected.each(save);
+                }
+            } else {
+                coverData.selected.each(save);
+            }
 
             function save(i, element) {
                 const id = $(element).attr('id');
@@ -703,18 +718,23 @@
                         name: path + seriesFolder + title + coverData.extension,
                         saveAs: false,
                         onload: onLoad,
-                        onabort: reportError,
-                        onerror: reportError,
-                        ontimeout: reportError
+                        onabort: handleError,
+                        onerror: handleError,
+                        ontimeout: handleError
                     });
 
                     function onLoad() {
                         --concurrentDownloads.count;
                         displayProgress($(element).parent().children('.download-progress'), 100);
                     }
-                    function reportError(rspObj) {
+                    function handleError() {
                         --concurrentDownloads.count;
-                        displayError(`${rspObj.status} ${rspObj.statusText} ${title} ${url}`);
+                        try {
+                            saveAs(url, title + coverData.extension);
+                        } catch (e) {
+                            displayError(`${title} ${url} ${e.message}`);
+                        }
+                        displayProgress($(element).parent().children('.download-progress'), 100);
                     }
                 }
             }
@@ -729,9 +749,13 @@
                 displayProgress(button.children('a').children('.download-progress'), metaconfig.percent, 'Zipping covers...');
             })
                 .then(function callback(blob) {
-                    const blobName = titleSection.replace(saveAsNameRegex, '');
+                    const title = titleSection.replace(saveAsNameRegex, '');
 
-                    saveAs(blob, blobName + '.zip');
+                    try {
+                        saveAs(blob, title + '.zip');
+                    } catch (e) {
+                        displayError(`${title} ${e.message}`);
+                    }
 
                     busyDownloading = false;
                     displayProgress(button.children('a').children('.download-progress'), 100);
