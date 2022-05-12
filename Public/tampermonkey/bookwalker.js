@@ -733,8 +733,9 @@
                             saveAs(url, title + coverData.extension);
                         } catch (e) {
                             displayError(`${title} ${url} ${e.message}`);
+                        } finally {
+                            displayProgress($(element).parent().children('.download-progress'), 100);
                         }
-                        displayProgress($(element).parent().children('.download-progress'), 100);
                     }
                 }
             }
@@ -749,16 +750,16 @@
                 displayProgress(button.children('a').children('.download-progress'), metaconfig.percent, 'Zipping covers...');
             })
                 .then(function callback(blob) {
+                    busyDownloading = false;
                     const title = titleSection.replace(saveAsNameRegex, '');
 
                     try {
                         saveAs(blob, title + '.zip');
                     } catch (e) {
                         displayError(`${title} ${e.message}`);
+                    } finally {
+                        displayProgress(button.children('a').children('.download-progress'), 100);
                     }
-
-                    busyDownloading = false;
-                    displayProgress(button.children('a').children('.download-progress'), 100);
                 });
 
             function zipCover(i, element) {
