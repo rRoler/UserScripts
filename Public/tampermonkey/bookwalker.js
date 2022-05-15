@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.9.4
+// @version      0.9.5
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -257,14 +257,15 @@
                 blob: {},
                 [coverData.source[1]]: {},
                 [coverData.source[2]]: {},
-                clickable: true,
-                clicked: false
+                selectable: true,
+                clicked: false,
+                fixStatus: buttonData.other.fixCover.text[0]
             }
 
             $(element).attr('id', id);
             $(element).before(`
                 <span class="bookwalker-cover-downloader cover-data cover-size hidden"></span>
-                <span class="bookwalker-cover-downloader cover-data cover-fix hidden"><p>${buttonData.other.fixCover.text[0]}</p></span>
+                <span class="bookwalker-cover-downloader cover-data cover-fix hidden"><p>${coverData.cover[id].fixStatus}</p></span>
                 <span class="bookwalker-cover-downloader cover-data cover-link hidden"></span>
                 <span class="bookwalker-cover-downloader cover-data download-progress hidden"></span>
             `);
@@ -284,7 +285,7 @@
             if (busyDownloading === false) {
                 const id = element.attr('id');
 
-                if (select === true && coverData.cover[id].clickable === true) {
+                if (select === true && coverData.cover[id].selectable === true) {
                     element.addClass('cover-selected');
 
                     if (!coverData.cover[id].clicked || coverData.cover[id].clicked === false) {
@@ -366,7 +367,7 @@
 
             getUrl[coverData.source[1]] = function () {
                 const url = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}${coverData.extension}`;
-                const filePath = url.replace(/https:\/\//);
+                const filePath = url.replace(/https:\/\//, '');
 
                 coverData.cover[id][coverData.source[1]].url = url;
                 coverData.cover[id][coverData.source[1]].filePath = filePath;
@@ -534,7 +535,7 @@
             }
             function setCover(source, url) {
                 if (url === false) {
-                    coverData.cover[id].clickable = false;
+                    coverData.cover[id].selectable = false;
                     coverData.cover[id].blob.url = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFAAH/F1FwBgAAAABJRU5ErkJggg==';
                     coverData.cover[id].blob.coverUrl = '#';
                     coverData.cover[id].blob.filePath = 'Failed to get cover';
@@ -575,12 +576,14 @@
             }
             if (config.showTryToFix === true && config.downloadSource === coverData.source[0] || config.showTryToFix === true && config.downloadSource === coverData.source[1]) {
                 const fixElement = element.parent().children('.cover-fix');
-                
+
                 fixElement.removeClass('hidden');
-                if (fixElement.children('p').text() === buttonData.other.fixCover.text[2]) {
-                    fixElement.children('p').text(buttonData.other.fixCover.text[1]);
-                } else if (fixElement.children('p').text() === buttonData.other.fixCover.text[3]) {
-                    fixElement.children('p').text(buttonData.other.fixCover.text[0]);
+                if (coverData.cover[id].fixStatus === buttonData.other.fixCover.text[2]) {
+                    coverData.cover[id].fixStatus = buttonData.other.fixCover.text[1];
+                    fixElement.children('p').text(coverData.cover[id].fixStatus);
+                } else if (coverData.cover[id].fixStatus === buttonData.other.fixCover.text[3]) {
+                    coverData.cover[id].fixStatus = buttonData.other.fixCover.text[0];
+                    fixElement.children('p').text(coverData.cover[id].fixStatus);
                 }
             }
             if (config.showCoverSize === true) {
@@ -591,12 +594,13 @@
             }
         }
         function displayProgress(element, percent, status) {
-            if (percent >= 0 && percent < 100) {
+            const percentRounded = `${Math.round(percent)}%`;
+            if (percent >= 0 && percent < 100 && percentRounded !== element.children('.progress-percent').text()) {
                 element.parent('a').children('.button-text').addClass('hidden');
                 element.removeClass('hidden');
-                element.children('.progress-status').text(`${status}`);
+                element.children('.progress-status').text(status);
                 element.children('.progress-bar').val(percent);
-                element.children('.progress-percent').text(`${Math.round(percent * 100) / 100}%`);
+                element.children('.progress-percent').text(percentRounded);
             } else if (percent >= 100) {
                 element.parent('a').children('.button-text').removeClass('hidden');
                 element.addClass('hidden');
@@ -608,24 +612,26 @@
                 const imgElement = currentElement.parent().parent().children('img');
                 const imgElementId = imgElement.attr('id');
                 coverData.cover[imgElementId][coverData.source[1]].urlStatus = true;
-                coverData.cover[imgElementId].clickable = true;
+                coverData.cover[imgElementId].selectable = true;
                 delete coverData.cover[imgElementId].blob.url;
                 delete coverData.cover[imgElementId][coverData.source[1]].blobUrl;
 
-                if (currentElement.text() === buttonData.other.fixCover.text[0]) {
+                if (coverData.cover[imgElementId].fixStatus === buttonData.other.fixCover.text[0]) {
                     coverData.cover[imgElementId][coverData.source[1]].oldUrl = coverData.cover[imgElementId][coverData.source[1]].url;
                     coverData.cover[imgElementId][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[imgElementId][coverData.source[1]].url.replace(/^\D+|\D+$/g, '') - 1))}${coverData.extension}`;
+                    coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[2];
 
-                    currentElement.text(buttonData.other.fixCover.text[2]);
+                    currentElement.text(coverData.cover[imgElementId].fixStatus);
                     try {
                         getBestQualityCover(imgElement);
                     } catch (e) {
                         displayError(e.message);
                     }
-                } else if (currentElement.text() === buttonData.other.fixCover.text[1]) {
+                } else if (coverData.cover[imgElementId].fixStatus === buttonData.other.fixCover.text[1]) {
                     coverData.cover[imgElementId][coverData.source[1]].url = coverData.cover[imgElementId][coverData.source[1]].oldUrl;
+                    coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[3];
 
-                    currentElement.text(buttonData.other.fixCover.text[3]);
+                    currentElement.text(coverData.cover[imgElementId].fixStatus);
                     try {
                         getBestQualityCover(imgElement);
                     } catch (e) {
@@ -635,10 +641,12 @@
             }
         }
         function createButton(i, button) {
+            button.status = button.text[0];
+
             $('#bookwalker-cover-downloader-buttons').append(`
                 <${buttonData.tag} id="${button.id}" class="${buttonData.class} bookwalker-cover-downloader">
                     <a class="bookwalker-cover-downloader">
-                        <span class="bookwalker-cover-downloader button-text">${button.text[0]}</span>
+                        <span class="bookwalker-cover-downloader button-text">${button.status}</span>
                         <span class="bookwalker-cover-downloader download-progress hidden"></span>
                     </a>
                 </${buttonData.tag}>
@@ -788,12 +796,14 @@
             if (busyDownloading === false) {
                 const buttonTextElement = button.children('a').children('.button-text');
 
-                if (buttonTextElement.text() === buttonData.button.selectAll.text[1]) {
+                if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[1]) {
                     coverData.image.each((i, element) => selectCover($(element), false));
-                    buttonTextElement.text(buttonData.button.selectAll.text[0]);
-                } else if (buttonTextElement.text() === buttonData.button.selectAll.text[0]) {
+                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[0];
+                    buttonTextElement.text(buttonData.button.selectAll.status);
+                } else if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[0]) {
                     coverData.image.each((i, element) => selectCover($(element)));
-                    buttonTextElement.text(buttonData.button.selectAll.text[1]);
+                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[1];
+                    buttonTextElement.text(buttonData.button.selectAll.status);
                 }
             }
         }
