@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.9.7
+// @version      0.9.8
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -156,6 +156,9 @@
                     margin: 2px;
                     display: inline-block;
                     max-width: 256px;
+                }
+                a.m-thumb__image.bookwalker-cover-downloader {
+                    position: static;
                 }
             `);
         }
@@ -538,7 +541,7 @@
                 if (url === false) {
                     coverData.cover[id].selectable = false;
                     coverData.cover[id].blob.url = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFAAH/F1FwBgAAAABJRU5ErkJggg==';
-                    coverData.cover[id].blob.coverUrl = '#';
+                    coverData.cover[id].blob.coverUrl = coverData.cover[id].blob.url;
                     coverData.cover[id].blob.filePath = 'Failed to get cover';
                     coverData.cover[id].blob.width = 1;
                     coverData.cover[id].blob.height = 1;
@@ -590,7 +593,7 @@
                 element.parent().children('.cover-size').removeClass('hidden').html(`<p>${coverData.cover[id].blob.width}x${coverData.cover[id].blob.height}</p>`);
             }
             if (config.showCoverURL === true) {
-                element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}">${coverData.cover[id].blob.filePath.replace(/(.*?)(?=[^\/]*$)/i, '').replace(/coverImage_/i, '')}</a>`);
+                element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}" target="_blank" rel="noopener noreferrer">${coverData.cover[id].blob.filePath.replace(/(.*?)(?=[^\/]*$)/i, '').replace(/coverImage_/i, '')}</a>`);
             }
         }
         function displayProgress(element, percent, status) {
@@ -714,7 +717,6 @@
 
             function save(i, element) {
                 const id = $(element).attr('id');
-                const url = coverData.cover[id].blob.url;
                 const title = coverData.cover[id].title;
                 const seriesFolder = config.saveAsJPEGSeriesFolder ? titleSection.replace(saveAsNameRegex, '') + '/':'';
                 const path = config.SaveAsJPEGLocationCheckbox ? config.saveAsJPEGLocation:'';
@@ -723,26 +725,30 @@
                 readyToDownload().then(download);
 
                 function download() {
-                    GM_download({
-                        url: url,
-                        name: path + seriesFolder + title + coverData.extension,
-                        saveAs: false,
-                        onload: onLoad,
-                        onabort: handleError,
-                        onerror: handleError,
-                        ontimeout: handleError
-                    });
+                    if (config.SaveAsJPEGLocationCheckbox) {
+                        GM_download({
+                            url: coverData.cover[id].blob.coverUrl,
+                            name: path + seriesFolder + title + coverData.extension,
+                            saveAs: false,
+                            onload: onLoad,
+                            onabort: handleError,
+                            onerror: handleError,
+                            ontimeout: handleError
+                        });
 
-                    function onLoad() {
-                        --concurrentDownloads.count;
-                        displayProgress($(element).parent().children('.download-progress'), 100);
+                        function onLoad() {
+                            --concurrentDownloads.count;
+                            displayProgress($(element).parent().children('.download-progress'), 100);
+                        }
+                    } else {
+                        handleError();
                     }
                     function handleError() {
                         --concurrentDownloads.count;
                         try {
-                            saveAs(url, title + coverData.extension);
+                            saveAs(coverData.cover[id].blob.url, title + coverData.extension);
                         } catch (e) {
-                            displayError(`${title} ${url} ${e.message}`);
+                            displayError(`${title} ${coverData.cover[id].blob.url} ${e.message}`);
                         } finally {
                             displayProgress($(element).parent().children('.download-progress'), 100);
                         }
