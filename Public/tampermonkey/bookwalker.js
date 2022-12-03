@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/RolerGames/UserScripts
-// @version      0.9.8
+// @version      0.9.8.1
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
+// @match        https://r18.bookwalker.jp/*
 // @match        https://global.bookwalker.jp/*
 // @icon         https://bookwalker.jp/favicon.ico
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js
@@ -139,7 +140,7 @@
     GM_config.init(bookwalkerConfig);
     GM_registerMenuCommand('Settings', () => GM_config.open());
 
-    if (window.location.href.search(/https:\/\/bookwalker.jp\/series\/.*/gi) > -1) {
+    if (window.location.href.search(/https:\/\/bookwalker.jp\/series\/.*/gi) > -1 || window.location.href.search(/https:\/\/r18.bookwalker.jp\/series\/.*/gi) > -1) {
         if (window.location.href.search(/https:\/\/.*\/series\/.*\/list\/.*/gi) <= -1) {
             if (GM_config.get('redirectSeriesPages') === true && $(`a[href="${window.location.href}list/"]`).length > 0) {
                 window.location.replace(`${window.location.href}list/`);
