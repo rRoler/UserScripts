@@ -22,6 +22,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @grant        GM_setClipboard
 // @connect      bookwalker.jp
 // @run-at       document-end
 // ==/UserScript==
@@ -224,6 +225,12 @@
                 id: 'bookwalker-cover-downloader-download-as-zip',
                 text: ['Save Selected Covers as ZIP'],
                 execute: (button) => saveCovers(saveCoversAsZIP, button),
+                element: undefined
+            },
+            copyLinks: {
+                id: 'bookwalker-cover-downloader-copy-links',
+                text: ['Copy Cover Links'],
+                execute: (button) => saveCovers(copyCoverLinks, button),
                 element: undefined
             },
             selectAll: {
@@ -876,6 +883,15 @@
                     });
                 });
             }
+        }
+        async function copyCoverLinks() {
+            busyDownloading = false;
+            let links = '';
+            coverData.selected.each((i, element) => {
+                const id = $(element).attr('id');
+                links += `[${coverData.cover[id].title}](${coverData.cover[id].blob.coverUrl})\n`;
+            });
+            await GM_setClipboard(links);
         }
         function selectAllCovers() {
             if (!busyDownloading) {
