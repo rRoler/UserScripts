@@ -134,7 +134,7 @@
         },
         'events': {
             'save': () => needsReload = true,
-            'close': () => needsReload === true ? location.reload():false
+            'close': () => needsReload ? location.reload():false
         }
     }
     GM_config.init(bookwalkerConfig);
@@ -142,7 +142,7 @@
 
     if (window.location.href.search(/https:\/\/bookwalker.jp\/series\/.*/gi) > -1 || window.location.href.search(/https:\/\/r18.bookwalker.jp\/series\/.*/gi) > -1) {
         if (window.location.href.search(/https:\/\/.*\/series\/.*\/list\/.*/gi) <= -1) {
-            if (GM_config.get('redirectSeriesPages') === true && $(`a[href="${window.location.href}list/"]`).length > 0) {
+            if (GM_config.get('redirectSeriesPages') && $(`a[href="${window.location.href}list/"]`).length > 0) {
                 window.location.replace(`${window.location.href}list/`);
             }
         } else {
@@ -252,7 +252,7 @@
 
         coverData.image.each(getCoverUrl);
 
-        if (config.downloadOnLoad === true) {
+        if (config.downloadOnLoad) {
             coverData.image.each((i, element) => selectCover($(element)));
             coverData.image.each((i, element) => selectCover($(element), false));
             coverData.lastSelected = undefined;
@@ -319,14 +319,14 @@
             }
         }
         function selectCover(element, select = true) {
-            if (busyDownloading === false) {
+            if (!busyDownloading) {
                 const id = element.attr('id');
 
-                if (coverData.cover[id].selectable === true) coverData.lastSelected = element;
-                if (select === true && coverData.cover[id].selectable === true) {
+                if (coverData.cover[id].selectable) coverData.lastSelected = element;
+                if (select && coverData.cover[id].selectable) {
                     element.addClass('cover-selected');
 
-                    if (!coverData.cover[id].clicked || coverData.cover[id].clicked === false) {
+                    if (!coverData.cover[id].clicked || !coverData.cover[id].clicked) {
                         const title = element.attr('title').replace(saveAsNameRegex, '');
 
                         if (coverData.knownTitle[title] > -1) {
@@ -342,7 +342,7 @@
                             displayError(e.message);
                         }
                     }
-                } else if (select === false) {
+                } else if (!select) {
                     element.removeClass('cover-selected');
                 }
                 coverData.selected = $('.bookwalker-cover-downloader.cover-selected');
@@ -540,11 +540,11 @@
                     const source1 = coverData.source[1];
                     const source2 = coverData.source[2];
 
-                    if (url === false) {
+                    if (!url) {
                         download(source2);
                     } else {
                         promiseUrl(source2, 'url').then(function (url) {
-                            if (url === false) {
+                            if (!url) {
                                 setCover(source1, coverData.cover[id][source1].urlStatus);
                             } else {
                                 if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
@@ -570,7 +570,7 @@
 
             function download(source, fn = setCover) {
                 promiseUrl(source, 'url').then(function (url) {
-                    if (url === false) {
+                    if (!url) {
                         fn(source, url);
                     } else {
                         getCover.get(url, getCover[source], source);
@@ -579,7 +579,7 @@
                 });
             }
             function setCover(source, url) {
-                if (url === false) {
+                if (!url) {
                     coverData.cover[id].selectable = false;
                     coverData.cover[id].blob.url = coverData.cover[id].rimgCoverUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id].blob.url;
@@ -595,6 +595,12 @@
                     coverData.cover[id].blob.width = coverData.cover[id][source].width;
                     coverData.cover[id].blob.height = coverData.cover[id][source].height;
                 }
+                $.each(coverData.source, function (i, source) {
+                    if (coverData.cover[id][source] && coverData.cover[id][source].blobUrl !== coverData.cover[id].blob.url) {
+                        URL.revokeObjectURL(coverData.cover[id][source].blobUrl);
+                        delete coverData.cover[id][source].blobUrl;
+                    }
+                });
                 displayCover(element, id);
             }
             async function promiseUrl(source, url) {
@@ -602,7 +608,7 @@
                     check();
 
                     function check() {
-                        if (coverData.cover[id][source].urlStatus === true) {
+                        if (coverData.cover[id][source].urlStatus) {
                             if (coverData.cover[id][source][url]) {
                                 resolve(coverData.cover[id][source][url]);
                             } else {
@@ -616,10 +622,10 @@
             }
         }
         function displayCover(element, id) {
-            if (config.replaceCover === true) {
+            if (config.replaceCover) {
                 element.attr(dataAttribute, coverData.cover[id].blob.url).attr('src', coverData.cover[id].blob.url).attr('srcset', coverData.cover[id].blob.url);
             }
-            if (config.showTryToFix === true && config.downloadSource === coverData.source[0] || config.showTryToFix === true && config.downloadSource === coverData.source[1]) {
+            if (config.showTryToFix && config.downloadSource === coverData.source[0] || config.showTryToFix && config.downloadSource === coverData.source[1]) {
                 const fixElement = element.parent().children('.cover-fix');
 
                 fixElement.removeClass('hidden');
@@ -630,10 +636,10 @@
                 }
                 fixElement.children('p').text(coverData.cover[id].fixStatus);
             }
-            if (config.showCoverSize === true) {
+            if (config.showCoverSize) {
                 element.parent().children('.cover-size').removeClass('hidden').html(`<p>${coverData.cover[id].blob.width}x${coverData.cover[id].blob.height}</p>`);
             }
-            if (config.showCoverURL === true) {
+            if (config.showCoverURL) {
                 element.parent().children('.cover-link').removeClass('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}" target="_blank" rel="noopener noreferrer">${coverData.cover[id].blob.filePath.replace(/(.*?)(?=[^\/]*$)/i, '').replace(/coverImage_/i, '')}</a>`);
             }
         }
@@ -651,7 +657,7 @@
             }
         }
         function fixCover(element) {
-            if (busyDownloading === false) {
+            if (!busyDownloading) {
                 const currentElement = $(element.currentTarget);
                 const imgElement = currentElement.parent().parent().children('img');
                 const imgElementId = imgElement.attr('id');
@@ -665,10 +671,11 @@
                 function fix(revert) {
                     coverData.cover[imgElementId][coverData.source[1]].urlStatus = true;
                     coverData.cover[imgElementId].selectable = true;
+                    URL.revokeObjectURL(coverData.cover[imgElementId].blob.url);
                     delete coverData.cover[imgElementId].blob.url;
                     delete coverData.cover[imgElementId][coverData.source[1]].blobUrl;
 
-                    if (revert === true) {
+                    if (revert) {
                         coverData.cover[imgElementId][coverData.source[1]].url = coverData.cover[imgElementId][coverData.source[1]].oldUrl;
                         coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[3];
                     } else {
@@ -729,7 +736,7 @@
             }
         }
         function saveCovers(fn, button) {
-            if (coverData.selected.length > 0 && busyDownloading === false) {
+            if (coverData.selected.length > 0 && !busyDownloading) {
                 try {
                     coverUrlsCheck(button).then(function () {
                         try {
@@ -823,7 +830,7 @@
             function zipCover(i, element) {
                 const id = $(element).attr('id');
 
-                zip.file(coverData.cover[id].title + coverData.extension, coverToPromise(id), {binary:true});
+                zip.file(coverData.cover[id].title + coverData.extension, coverToPromise(id), {binary: true});
             }
             function coverToPromise(id) {
                 return new Promise(function (resolve, reject) {
@@ -843,7 +850,7 @@
             }
         }
         function selectAllCovers() {
-            if (busyDownloading === false) {
+            if (!busyDownloading) {
                 if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[1]) {
                     coverData.image.each((i, element) => selectCover($(element), false));
                 } else if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[0]) {
