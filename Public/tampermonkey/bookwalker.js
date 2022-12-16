@@ -203,6 +203,7 @@
             cover: {},
             extension: '.jpg',
             selected: [],
+            lastSelected: undefined,
         }
         const checkTimeout = 200;
         let busyDownloading = false;
@@ -251,6 +252,7 @@
         if (config.downloadOnLoad === true) {
             coverData.image.each((i, element) => selectCover($(element)));
             coverData.image.each((i, element) => selectCover($(element), false));
+            coverData.lastSelected = undefined;
         }
 
         function displayError(message) {
@@ -283,19 +285,41 @@
             $(element).parent().children('.cover-fix').children('p').on('click', fixCover);
             $(element).addClass('bookwalker-cover-downloader');
             $(element).removeClass('cover-selected').parent().removeAttr('href').addClass('bookwalker-cover-downloader');
-            $(element).on('mousedown', cover => coverClick($(cover.currentTarget)));
+            $(element).on('mousedown', coverClick);
         }
-        function coverClick(element) {
+        function coverClick(event) {
+            const element = $(event.currentTarget)
+
             if (element.hasClass('cover-selected')) {
-                selectCover(element, false);
+                onClick(false);
             } else {
-                selectCover(element);
+                onClick();
+            }
+
+            function onClick(select = true) {
+                if (event.shiftKey && coverData.lastSelected) {
+                    const currentCoverIndex = Object.values(coverData.image).indexOf(element[0]);
+                    const lastSelectedCoverIndex = Object.values(coverData.image).indexOf(coverData.lastSelected[0]);
+
+                    if (currentCoverIndex > lastSelectedCoverIndex) {
+                        for (let i = lastSelectedCoverIndex; i <= currentCoverIndex; i++) {
+                            selectCover($(coverData.image[i]), select);
+                        }
+                    } else {
+                        for (let i = lastSelectedCoverIndex; i >= currentCoverIndex; i--) {
+                            selectCover($(coverData.image[i]), select);
+                        }
+                    }
+                } else {
+                    selectCover((element), select)
+                }
             }
         }
         function selectCover(element, select = true) {
             if (busyDownloading === false) {
                 const id = element.attr('id');
 
+                if (coverData.cover[id].selectable === true) coverData.lastSelected = element;
                 if (select === true && coverData.cover[id].selectable === true) {
                     element.addClass('cover-selected');
 
@@ -820,6 +844,7 @@
                     buttonData.button.selectAll.status = buttonData.button.selectAll.text[1];
                 }
                 buttonTextElement.text(buttonData.button.selectAll.status);
+                coverData.lastSelected = undefined;
             }
         }
 
