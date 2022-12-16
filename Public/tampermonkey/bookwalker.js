@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      0.9.8.2
+// @version      0.9.9-dev
 // @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -161,6 +161,9 @@
                 a.m-thumb__image.bookwalker-cover-downloader {
                     position: static;
                 }
+                img.lazy.bookwalker-cover-downloader.cover-selected {
+                    outline: solid rgb(72, 113, 58) 4px;
+                }
             `);
         }
     } else if (window.location.href.search(/https:\/\/global.bookwalker.jp\/series\/.*/gi) > -1) {
@@ -176,6 +179,9 @@
                 cursor: pointer; 
                 display: inline-block;
                 max-width: 256px;
+            }
+            img.lazy.bookwalker-cover-downloader.cover-selected {
+                outline: solid rgb(192, 89, 0) 4px;
             }
         `);
     }
@@ -263,7 +269,8 @@
                 [coverData.source[2]]: {},
                 selectable: true,
                 clicked: false,
-                fixStatus: buttonData.other.fixCover.text[0]
+                fixStatus: buttonData.other.fixCover.text[0],
+                rimgCoverUrl: $(element).attr(dataAttribute)
             }
 
             $(element).attr('id', id);
@@ -370,7 +377,7 @@
             }
 
             getUrl[coverData.source[1]] = function () {
-                const url = `https://c.bookwalker.jp/coverImage_${(parseInt($(element).attr(dataAttribute).split('/')[3].split('').reverse().join('')) - 1)}${coverData.extension}`;
+                const url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[id].rimgCoverUrl.split('/')[3].split('').reverse().join('')) - 1)}${coverData.extension}`;
 
                 coverData.cover[id][coverData.source[1]].url = url;
             }
@@ -541,11 +548,11 @@
             function setCover(source, url) {
                 if (url === false) {
                     coverData.cover[id].selectable = false;
-                    coverData.cover[id].blob.url = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFAAH/F1FwBgAAAABJRU5ErkJggg==';
+                    coverData.cover[id].blob.url = coverData.cover[id].rimgCoverUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id].blob.url;
                     coverData.cover[id].blob.filePath = 'Failed to get cover';
-                    coverData.cover[id].blob.width = 1;
-                    coverData.cover[id].blob.height = 1;
+                    coverData.cover[id].blob.width = 0;
+                    coverData.cover[id].blob.height = 0;
                     selectCover(element, false);
                     displayError(`Failed to get the cover of ${coverData.cover[id].title} from ${source}`);
                 } else {
@@ -854,6 +861,9 @@
                 overflow: hidden;
                 white-space: nowrap;
                 border-radius: 4px;
+            }
+            .bookwalker-cover-downloader.cover-data p {
+                margin: 0.16rem;
             }
             .bookwalker-cover-downloader.cover-data a {
                 color: white;
