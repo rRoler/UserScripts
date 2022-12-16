@@ -211,17 +211,20 @@
             downloadAsJpeg: {
                 id: 'bookwalker-cover-downloader-download-as-jpeg',
                 text: ['Save Selected Covers as JPEG'],
-                execute: (button) => saveCovers(saveCoversAsJPEG, button)
+                execute: (button) => saveCovers(saveCoversAsJPEG, button),
+                element: undefined
             },
             downloadAsZip: {
                 id: 'bookwalker-cover-downloader-download-as-zip',
                 text: ['Save Selected Covers as ZIP'],
-                execute: (button) => saveCovers(saveCoversAsZIP, button)
+                execute: (button) => saveCovers(saveCoversAsZIP, button),
+                element: undefined
             },
             selectAll: {
                 id: 'bookwalker-cover-downloader-select-all',
                 text: ['Select All', 'Deselect All'],
-                execute: (button) => selectAllCovers(button)
+                execute: (button) => selectAllCovers(button),
+                element: undefined
             }
         }
         buttonData.other = {
@@ -311,7 +314,7 @@
                         }
                     }
                 } else {
-                    selectCover((element), select)
+                    selectCover(element, select);
                 }
             }
         }
@@ -343,6 +346,12 @@
                     element.removeClass('cover-selected');
                 }
                 coverData.selected = $('.bookwalker-cover-downloader.cover-selected');
+
+                if (coverData.selected.length >= coverData.image.length)
+                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[1];
+                else
+                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[0];
+                buttonData.button.selectAll.element.children('a').children('.button-text').text(buttonData.button.selectAll.status);
             }
         }
         async function readyToDownload() {
@@ -680,16 +689,17 @@
         function createButton(i, button) {
             button.status = button.text[0];
 
-            $('#bookwalker-cover-downloader-buttons').append(`
+            buttonData.button[i].element = $(`
                 <${buttonData.tag} id="${button.id}" class="${buttonData.class} bookwalker-cover-downloader">
                     <a class="bookwalker-cover-downloader">
                         <span class="bookwalker-cover-downloader button-text">${button.status}</span>
                         <span class="bookwalker-cover-downloader download-progress hidden"></span>
                     </a>
                 </${buttonData.tag}>
-            `);
+            `)
+            $('#bookwalker-cover-downloader-buttons').append(buttonData.button[i].element);
 
-            $(`#${button.id}`).on('click', element => button.execute($(element.currentTarget)));
+            $(`#${button.id}`).on('click', (event) => button.execute($(event.currentTarget)));
         }
         async function coverUrlsCheck(element) {
             busyDownloading = true;
@@ -832,18 +842,13 @@
                 });
             }
         }
-        function selectAllCovers(button) {
+        function selectAllCovers() {
             if (busyDownloading === false) {
-                const buttonTextElement = button.children('a').children('.button-text');
-
                 if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[1]) {
                     coverData.image.each((i, element) => selectCover($(element), false));
-                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[0];
                 } else if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[0]) {
                     coverData.image.each((i, element) => selectCover($(element)));
-                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[1];
                 }
-                buttonTextElement.text(buttonData.button.selectAll.status);
                 coverData.lastSelected = undefined;
             }
         }
