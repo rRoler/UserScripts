@@ -39,14 +39,14 @@
                 'label': 'Download source:',
                 'section': ['Download Settings', '<hr>'],
                 'type': 'select',
-                'title': 'The source to downloaded the covers from. Automatic compares both sources and downloads from the higher quality one. viewer-epubs-trial.bookwalker.jp won\'t work with a paid or free book unless it has a preview.',
+                'title': 'The source to downloaded the covers from.\n Automatic compares both sources and downloads from the higher quality one.\n viewer-epubs-trial.bookwalker.jp won\'t work with a paid or free book unless it has a preview.',
                 'options': ['Automatic', 'c.bookwalker.jp', 'viewer-epubs-trial.bookwalker.jp'],
                 'default': 'Automatic'
             },
             'downloadPage': {
                 'label': 'Download preview page:',
                 'type': 'int',
-                'title': '(0 = cover) The page to download from the preview (viewer-epubs-trial.bookwalker.jp). min=0, max=8.',
+                'title': '0 = cover\n min=0, max=8.\n The page to download from the preview (viewer-epubs-trial.bookwalker.jp).',
                 'min': 0,
                 'max': 8,
                 'default': 0
@@ -60,7 +60,7 @@
             'maxConcurrentDownloads': {
                 'label': 'Maximum concurrent downloads:',
                 'type': 'int',
-                'title': 'Maximum number of files to download at the same time. min=1, max=128.',
+                'title': 'min=1, max=128.\n Maximum number of files to download at the same time.',
                 'min': 1,
                 'max': 128,
                 'default': 128
@@ -68,40 +68,56 @@
             'max403Retries': {
                 'label': 'Maximum download retries:',
                 'type': 'int',
-                'title': 'Maximum number of times to change the cover URL and try to download the cover if the expected URL is wrong. min=0, max=16.',
+                'title': 'min=0, max=16.\n Maximum number of times to change the cover URL and try to download the cover if the expected URL is wrong.',
                 'min': 0,
                 'max': 16,
                 'default': 4
             },
-            'saveAsJPEGSeriesFolder': {
-                'label': 'Save JPEGs inside a series folder',
-                'type': 'checkbox',
-                'title': 'Save JPEGs inside a folder (inside the JPEG save location) named as the series title (Chromium browsers might not support this).',
-                'default': false
-            },
-            'saveAsJPEGLocationCheckbox': {
-                'label': 'JPEG save location',
-                'type': 'checkbox',
-                'title': 'Enable/Disable the JPEG save location (works only with Tampermonkey on Firefox).',
-                'default': false
-            },
-            'saveAsJPEGLocation': {
-                'label': 'JPEG save location:',
+            'imageFileNameMask': {
+                'label': 'Image filename:',
+                'section': ['File Saving Settings', '<b>For images, zips, folders and links</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>Only for images and links</b><br> %volumeTitle% = Title of the book/volume<br> %number% = Increasing number<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> %coverURL% = URL of the cover image<br> %newLine% = New line (\n)'],
                 'type': 'text',
-                'title': 'Folder (inside the default download folder) in which the covers will be saved as JPEG.',
+                'title': '',
                 'size': 128,
-                'default': 'Cover Art/BookWalker/JPEG/'
+                'default': '%volumeTitle%.%fileExtension%'
+            },
+            'zipFileNameMask': {
+                'label': 'Zip filename:',
+                'type': 'text',
+                'title': '',
+                'size': 128,
+                'default': '%seriesTitle%.%fileExtension%'
+            },
+            'clipboardMask': {
+                'label': 'Copied links format:',
+                'type': 'text',
+                'title': '',
+                'size': 128,
+                'default': '[%volumeTitle%](%coverURL%)%newLine%'
+            },
+            'imageSaveLocationCheck': {
+                'label': 'Image save location',
+                'type': 'checkbox',
+                'title': 'Enable the image save location.\n ! ! ! WARNING ! ! !\n This works only with Tampermonkey on Firefox and it uses GM_download which does not support blob URLs anymore, so the covers will be redownloaded again when saving!',
+                'default': false
+            },
+            'imageSaveLocation': {
+                'label': 'Image save location:',
+                'type': 'text',
+                'title': 'Path (inside the default download folder) in which cover images will be saved.',
+                'size': 128,
+                'default': 'Cover Art/BookWalker/%fileExtension%/%seriesTitle%/'
             },
             'revertCoversAfterSave': {
                 'label': 'Revert covers after saving',
                 'type': 'checkbox',
-                'title': 'Reverts covers and removes blobs after saving. This may free up memory, but you will have to redownload the covers if you want to save them again.',
+                'title': 'Reverts covers and removes blobs after saving.\n This may free up memory, but you will have to redownload the covers if you want to save them again.',
                 'default': true
             },
             'saveAsJPEGConfirm': {
-                'label': 'Confirm saving as JPEG if selected covers are more than:',
+                'label': 'Confirm saving covers individually if selected covers are more than:',
                 'type': 'int',
-                'title': '(0 = disabled) Ask for confirmation before saving more than this number of covers as JPEG. min=0, max=64.',
+                'title': '0 = disabled\n min=0, max=64.\n Ask for confirmation before saving more than this number of covers.',
                 'min': 0,
                 'max': 64,
                 'default': 0
@@ -136,7 +152,7 @@
                 'section': ['BookWalker Japan Settings', 'https://bookwalker.jp/'],
                 'type': 'checkbox',
                 'title': 'Redirect the series pages to the series list pages.',
-                'default': false
+                'default': true
             }
         },
         'events': {
@@ -206,9 +222,9 @@
         const coverData = {
             image: $('img.lazy'),
             source: bookwalkerConfig.fields.downloadSource.options,
-            knownTitle: {},
+            knownFileName: {},
             cover: {},
-            extension: '.jpg',
+            extension: 'jpg',
             selected: [],
             lastSelected: undefined,
         }
@@ -217,13 +233,13 @@
         buttonData.button = {
             downloadAsJpeg: {
                 id: 'bookwalker-cover-downloader-download-as-jpeg',
-                text: ['Save Selected Covers as JPEG'],
+                text: ['Save Covers Individually'],
                 execute: (button) => saveCovers(saveCoversAsJPEG, button),
                 element: undefined
             },
             downloadAsZip: {
                 id: 'bookwalker-cover-downloader-download-as-zip',
-                text: ['Save Selected Covers as ZIP'],
+                text: ['Save Covers inside a ZIP'],
                 execute: (button) => saveCovers(saveCoversAsZIP, button),
                 element: undefined
             },
@@ -282,6 +298,7 @@
         function addCoverData(i, element) {
             const id = `bookwalker-cover-downloader-cover-${i}`;
             coverData.cover[id] = {
+                title: $(element).attr('title'),
                 blob: {},
                 [coverData.source[1]]: {},
                 [coverData.source[2]]: {},
@@ -340,15 +357,6 @@
                     element.addClass('cover-selected');
 
                     if (!coverData.cover[id].clicked) {
-                        const title = element.attr('title').replace(saveAsNameRegex, '');
-
-                        if (coverData.knownTitle[title] > -1) {
-                            coverData.cover[id].title = `${title}(${++coverData.knownTitle[title]})`;
-                        } else {
-                            coverData.knownTitle[title] = 0;
-                            coverData.cover[id].title = title;
-                        }
-
                         try {
                             getBestQualityCover(element);
                         } catch (e) {
@@ -423,7 +431,7 @@
             }
 
             getUrl[coverData.source[1]] = function () {
-                const url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[id].rimgCoverUrl.split('/')[3].split('').reverse().join('')) - 1)}${coverData.extension}`;
+                const url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[id].rimgCoverUrl.split('/')[3].split('').reverse().join('')) - 1)}.${coverData.extension}`;
 
                 coverData.cover[id][coverData.source[1]].url = url;
             }
@@ -522,7 +530,7 @@
                 if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/i)) {
                     coverData.cover[id][coverData.source[1]].urlStatus = false;
                 } else if (rspObj.status === 403 && retry403.count < retry403.max) {
-                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, '') - 1))}${coverData.extension}`, getCover[coverData.source[1]], coverData.source[1]);
+                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, '') - 1))}.${coverData.extension}`, getCover[coverData.source[1]], coverData.source[1]);
                     ++retry403.count;
                 } else {
                     const blobUrl = window.URL.createObjectURL(rspObj.response);
@@ -597,6 +605,8 @@
                     coverData.cover[id].blob.url = coverData.cover[id].rimgCoverUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id].blob.url;
                     coverData.cover[id].blob.filePath = 'Failed to get cover';
+                    coverData.cover[id].blob.fileName = 'Failed to get cover';
+                    coverData.cover[id].blob.fileNameId = 'Failed to get cover';
                     coverData.cover[id].blob.width = 0;
                     coverData.cover[id].blob.height = 0;
                     selectCover(element, false);
@@ -604,7 +614,9 @@
                 } else {
                     coverData.cover[id].blob.url = coverData.cover[id][source].blobUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id][source].url;
-                    coverData.cover[id].blob.filePath = coverData.cover[id][source].filePath;
+                    coverData.cover[id].blob.filePath = coverData.cover[id][source].filePath.replace(/\.[^.]*$/, '');
+                    coverData.cover[id].blob.fileName = coverData.cover[id].blob.filePath.split('/').pop();
+                    coverData.cover[id].blob.fileNameId = coverData.cover[id].blob.fileName.replace('coverImage_', '');
                     coverData.cover[id].blob.width = coverData.cover[id][source].width;
                     coverData.cover[id].blob.height = coverData.cover[id][source].height;
                 }
@@ -661,7 +673,7 @@
                 element.parent().children('.cover-size')[hideClass]('hidden').html(`<p>${coverData.cover[id].blob.width}x${coverData.cover[id].blob.height}</p>`);
             }
             if (config.showCoverURL) {
-                element.parent().children('.cover-link')[hideClass]('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}" target="_blank" rel="noopener noreferrer">${coverData.cover[id].blob.filePath.replace(/(.*?)(?=[^\/]*$)/i, '').replace(/coverImage_/i, '')}</a>`);
+                element.parent().children('.cover-link')[hideClass]('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}" target="_blank" rel="noopener noreferrer">${coverData.cover[id].blob.fileNameId}</a>`);
             }
         }
         function displayProgress(element, percent, status) {
@@ -701,7 +713,7 @@
                         coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[3];
                     } else {
                         coverData.cover[imgElementId][coverData.source[1]].oldUrl = coverData.cover[imgElementId][coverData.source[1]].url;
-                        coverData.cover[imgElementId][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[imgElementId][coverData.source[1]].url.replace(/^\D+|\D+$/g, '') - 1))}${coverData.extension}`;
+                        coverData.cover[imgElementId][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[imgElementId][coverData.source[1]].url.replace(/^\D+|\D+$/g, '') - 1))}.${coverData.extension}`;
                         coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[2];
                     }
                     currentElement.text(coverData.cover[imgElementId].fixStatus);
@@ -770,7 +782,7 @@
                                             selectCover($(element), false);
                                             URL.revokeObjectURL(coverData.cover[id].blob.url);
                                             delete coverData.cover[id].blob.url;
-                                            coverData.knownTitle = {};
+                                            coverData.knownFileName = {};
                                             coverData.cover[id].clicked = false;
                                         }
                                     });
@@ -801,18 +813,21 @@
 
             function save(i, element) {
                 const id = $(element).attr('id');
-                const title = coverData.cover[id].title;
-                const seriesFolder = config.saveAsJPEGSeriesFolder ? titleSection.replace(saveAsNameRegex, '') + '/':'';
-                const path = config.saveAsJPEGLocationCheckbox ? config.saveAsJPEGLocation:'';
+                coverData.cover[id].number = i + 1;
+                const saveFileName = getFileName({id: id});
 
                 displayProgress($(element).parent().children('.download-progress'), 0, 'Saving Cover...');
                 readyToDownload().then(download);
 
                 function download() {
-                    if (config.saveAsJPEGLocationCheckbox) {
+                    if (config.imageSaveLocationCheck) {
                         GM_download({
                             url: coverData.cover[id].blob.coverUrl,
-                            name: path + seriesFolder + title + coverData.extension,
+                            name: getFileName({
+                                id: id,
+                                string: config.imageSaveLocation,
+                                filterName: false
+                            }) + saveFileName,
                             saveAs: false,
                             onload: onLoad,
                             onabort: handleError,
@@ -830,9 +845,9 @@
                     function handleError() {
                         --concurrentDownloads.count;
                         try {
-                            saveAs(coverData.cover[id].blob.url, title + coverData.extension);
+                            saveAs(coverData.cover[id].blob.url, saveFileName);
                         } catch (e) {
-                            displayError(`${title} ${coverData.cover[id].blob.url} ${e.message}`);
+                            displayError(`${coverData.cover[id].title} ${saveFileName} ${coverData.cover[id].blob.url} ${e.message}`);
                         } finally {
                             displayProgress($(element).parent().children('.download-progress'), 100);
                         }
@@ -852,11 +867,15 @@
                 .then(function callback(blob) {
                     busyDownloading = false;
                     const title = titleSection.replace(saveAsNameRegex, '');
+                    const saveFileName = getFileName({
+                        string: config.zipFileNameMask,
+                        extension: 'zip'
+                    });
 
                     try {
-                        saveAs(blob, title + '.zip');
+                        saveAs(blob, saveFileName);
                     } catch (e) {
-                        displayError(`${title} ${e.message}`);
+                        displayError(`${title} ${saveFileName} ${e.message}`);
                     } finally {
                         displayProgress(button.children('a').children('.download-progress'), 100);
                     }
@@ -864,8 +883,10 @@
 
             function zipCover(i, element) {
                 const id = $(element).attr('id');
+                coverData.cover[id].number = i + 1;
+                const saveFileName = getFileName({id: id});
 
-                zip.file(coverData.cover[id].title + coverData.extension, coverToPromise(id), {binary: true});
+                zip.file(saveFileName, coverToPromise(id), {binary: true});
             }
             function coverToPromise(id) {
                 return new Promise(function (resolve, reject) {
@@ -889,9 +910,51 @@
             let links = '';
             coverData.selected.each((i, element) => {
                 const id = $(element).attr('id');
-                links += `[${coverData.cover[id].title}](${coverData.cover[id].blob.coverUrl})\n`;
+                links += getFileName({
+                    id: id,
+                    string: config.clipboardMask,
+                    filterName: false
+                });
             });
             await GM_setClipboard(links);
+        }
+        function getFileName({
+         id,
+         string = config.imageFileNameMask,
+         extension = coverData.extension,
+         filterName = true
+        }) {
+            const masks = {
+                seriesTitle: titleSection,
+                fileExtension: extension
+            }
+            if (id) {
+                masks.elementId = id;
+                masks.volumeTitle = coverData.cover[id].title;
+                masks.number = coverData.cover[id].number;
+                masks.fileName = coverData.cover[id].blob.fileName;
+                masks.fileNameId = coverData.cover[id].blob.fileNameId;
+                masks.coverURL = coverData.cover[id].blob.coverUrl;
+                masks.newLine = '\n';
+            }
+
+            let fileName = string
+            $.each(masks, function (i, argument) {
+                fileName = fileName.replaceAll(`%${i}%`, argument);
+            })
+
+            if (filterName) {
+                fileName.replace(saveAsNameRegex, '');
+
+                if (coverData.knownFileName[fileName] > -1) {
+                    const extensionIndex = fileName.lastIndexOf(`.${extension}`);
+                    fileName = `${fileName.substring(0, extensionIndex)}(${++coverData.knownFileName[fileName]})${fileName.substring(extensionIndex)}`;
+                } else {
+                    coverData.knownFileName[fileName] = 0;
+                }
+            }
+
+            return fileName;
         }
         function selectAllCovers() {
             if (!busyDownloading) {
