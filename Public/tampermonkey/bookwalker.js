@@ -75,7 +75,7 @@
             },
             'imageFileNameMask': {
                 'label': 'Image filename:',
-                'section': ['File Saving Settings', '<b>For images, zips, folders and links</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>Only for images and links</b><br> %volumeTitle% = Title of the book/volume<br> %number% = Increasing number<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> %coverURL% = URL of the cover image<br> %newLine% = New line (\n)'],
+                'section': ['File Saving Settings', '<b>For images, zips, folders and links</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>For images, folders and links</b><br> %volumeTitle% = Title of the book/volume<br> %number% = Increasing number<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> %coverURL% = URL of the cover image<br> %newLine% = New line (\n)'],
                 'type': 'text',
                 'title': '',
                 'size': 128,
@@ -239,7 +239,7 @@
             },
             downloadAsZip: {
                 id: 'bookwalker-cover-downloader-download-as-zip',
-                text: ['Save Covers inside a ZIP'],
+                text: ['Save Covers Inside a ZIP'],
                 execute: (button) => saveCovers(saveCoversAsZIP, button),
                 element: undefined
             },
