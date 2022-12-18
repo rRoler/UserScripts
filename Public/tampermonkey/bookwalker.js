@@ -163,59 +163,90 @@
     GM_config.init(bookwalkerConfig);
     GM_registerMenuCommand('Settings', () => GM_config.open());
 
+    let bookwalkerCoverDownloaderPageConfig = {
+        dataAttribute: 'data-original',
+        titleSection: $('.o-contents-section__title').text(),
+        coverSection: $('.o-contents-section__body').first(),
+        buttonData: {
+            tag: 'button',
+            class: 'a-basic-btn--secondary'
+        },
+        css: `
+           button.bookwalker-cover-downloader.a-basic-btn--secondary {
+               margin: 2px;
+               display: inline-block;
+               max-width: 256px;
+           }
+           a.m-thumb__image.bookwalker-cover-downloader {
+               position: static;
+           }
+           img.bookwalker-cover-downloader.cover-selected {
+               outline: solid #5a8d48 4px;
+           }
+           #bookwalker-cover-downloader-source-select select {
+               background-color: #5a8d48;
+           }`
+    }
     if (window.location.href.search(/https:\/\/bookwalker.jp\/series\/.*/gi) > -1 || window.location.href.search(/https:\/\/r18.bookwalker.jp\/series\/.*/gi) > -1) {
         if (window.location.href.search(/https:\/\/.*\/series\/.*\/list\/.*/gi) <= -1) {
-            if (GM_config.get('redirectSeriesPages') && $(`a[href="${window.location.href}list/"]`).length > 0) {
-                window.location.replace(`${window.location.href}list/`);
+            const wayomiCoverSection = $('.p-content-top');
+            if (wayomiCoverSection) {
+                // TODO
             }
-        } else {
-            bookwalkerCoverDownloader(
-                'data-original',
-                $('.o-contents-section__title').text(),
-                $('.o-contents-section__body').first(), {
-                    tag: 'button',
-                    class: 'a-basic-btn--secondary'
-                }, `
-                button.bookwalker-cover-downloader.a-basic-btn--secondary {
-                    margin: 2px;
-                    display: inline-block;
-                    max-width: 256px;
-                }
-                a.m-thumb__image.bookwalker-cover-downloader {
-                    position: static;
-                }
-                img.lazy.bookwalker-cover-downloader.cover-selected {
-                    outline: solid #5a8d48 4px;
-                }
-                #bookwalker-cover-downloader-source-select select {
-                    background-color: #5a8d48;
-                }
-            `);
-        }
-    } else if (window.location.href.search(/https:\/\/global.bookwalker.jp\/series\/.*/gi) > -1) {
-        bookwalkerCoverDownloader(
-            'data-srcset',
-            $('.title-main-inner').text().split('\n                            ')[1],
-            $('.o-tile-list').first(), {
-                tag: 'p',
-                class: 'btn-cart-add btn-box m-b40'
-            }, `
-            p.bookwalker-cover-downloader.btn-cart-add.btn-box.m-b40 {
-                margin: 2px;
-                cursor: pointer; 
-                display: inline-block;
-                max-width: 256px;
-            }
-            img.lazy.bookwalker-cover-downloader.cover-selected {
-                outline: solid #ff8114 4px;
-            }
-            #bookwalker-cover-downloader-source-select select {
-                background-color: #ff8114;
-            }
-        `);
+            if (GM_config.get('redirectSeriesPages') && $(`a[href="${window.location.href}list/"]`).length > 0)
+                return window.location.replace(`${window.location.href}list/`);
+        } else return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
     }
+    if (window.location.href.search(/https:\/\/bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) > -1) {
+        bookwalkerCoverDownloaderPageConfig.titleSection = $('.p-main__title').text();
+        bookwalkerCoverDownloaderPageConfig.coverSection = $('.p-main').first();
+        bookwalkerCoverDownloaderPageConfig.singleCover = true;
+        return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+    }
+    bookwalkerCoverDownloaderPageConfig = {
+        dataAttribute: 'data-srcset',
+        titleSection: $('.title-main-inner').text().split('\n                            ')[1],
+        coverSection: $('.o-tile-list').first(),
+        buttonData: {
+            tag: 'p',
+            class: 'btn-cart-add btn-box m-b40'
+        },
+        css: `
+        p.bookwalker-cover-downloader.btn-cart-add.btn-box.m-b40 {
+            margin: 2px;
+            cursor: pointer; 
+            display: inline-block;
+            max-width: 256px;
+        }
+        img.bookwalker-cover-downloader.cover-selected {
+            outline: solid #ff8114 4px;
+        }
+        #bookwalker-cover-downloader-source-select select {
+            background-color: #ff8114;
+        }`
+    }
+    if (window.location.href.search(/https:\/\/global.bookwalker.jp\/series\/.*/gi) > -1) {
+        return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+    }
+    if (window.location.href.search(/https:\/\/global.bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) > -1) {
+        bookwalkerCoverDownloaderPageConfig.dataAttribute = 'src';
+        bookwalkerCoverDownloaderPageConfig.titleSection = $('.detail-book-title.clearfix').children('h1')[0].firstChild.textContent;
+        bookwalkerCoverDownloaderPageConfig.coverSection = $('.wrap.clearfix').first();
+        bookwalkerCoverDownloaderPageConfig.singleCover = true;
+        bookwalkerCoverDownloaderPageConfig.imageSelector = $('.book-img').children('a').children('img');
+        return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+    }
+    return false;
 
-    function bookwalkerCoverDownloader(dataAttribute, titleSection, coverSection, buttonData = {tag: '', class: ''}, css) {
+    function bookwalkerCoverDownloader({
+       dataAttribute,
+       titleSection,
+       coverSection,
+       buttonData = {tag: '', class: ''},
+       css,
+       singleCover = false,
+       imageSelector = $('img.lazy')
+    }) {
         const config = {};
         $.each(bookwalkerConfig.fields, function (i) {
             config[i] = GM_config.get(i);
@@ -226,7 +257,7 @@
         }
         const saveAsNameRegex = /[\\\/:"*?<>|]/gi;
         const coverData = {
-            image: $('img.lazy'),
+            image: singleCover ? imageSelector.first():imageSelector,
             source: bookwalkerConfig.fields.downloadSource.options,
             knownFileName: {},
             cover: {},
@@ -268,6 +299,12 @@
                 execute: (button) => setSource(button),
                 element: undefined
             }
+        }
+        if (singleCover) {
+            buttonData.button.downloadAsJpeg.text = ['Save Cover'];
+            buttonData.button.copyLinks.text = ['Copy Cover Link'];
+            delete buttonData.button.downloadAsZip;
+            delete buttonData.button.selectAll;
         }
         buttonData.other = {
             fixCover: {
@@ -313,7 +350,8 @@
 
         coverData.image.each(getCoverUrl);
 
-        if (config.downloadOnLoad) downloadAll();
+        if (singleCover) coverData.image.each((i, element) => selectCover($(element)));
+        else if (config.downloadOnLoad) downloadAll();
 
         function displayError(message) {
             const container = $('#bookwalker-cover-downloader-errors');
@@ -326,7 +364,7 @@
         function addCoverData(i, element) {
             const id = `bookwalker-cover-downloader-cover-${i}`;
             coverData.cover[id] = {
-                title: $(element).attr('title'),
+                title: singleCover ? titleSection:$(element).attr('title'),
                 blob: {},
                 [coverData.source[1]]: {},
                 [coverData.source[2]]: {},
@@ -397,11 +435,13 @@
 
                 coverData.selected = $('.bookwalker-cover-downloader.cover-selected');
 
-                if (coverData.selected.length >= coverData.selectable)
-                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[1];
-                else
-                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[0];
-                buttonData.button.selectAll.element.children('a').children('.button-text').text(buttonData.button.selectAll.status);
+                if (!singleCover) {
+                    if (coverData.selected.length >= coverData.selectable)
+                        buttonData.button.selectAll.status = buttonData.button.selectAll.text[1];
+                    else
+                        buttonData.button.selectAll.status = buttonData.button.selectAll.text[0];
+                    buttonData.button.selectAll.element.children('a').children('.button-text').text(buttonData.button.selectAll.status);
+                }
             }
         }
         async function readyToDownload() {
@@ -465,7 +505,7 @@
                 coverData.cover[id][coverData.source[1]].url = url;
             }
             getUrl[coverData.source[2]] = function () {
-                const uuid = !$(element).parent().attr('data-uuid') ? $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, ''):$(element).parent().attr('data-uuid');
+                const uuid = singleCover ? window.location.href.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi):!$(element).parent().attr('data-uuid') ? $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, ''):$(element).parent().attr('data-uuid');
 
                 getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${uuid}&BID=0`, getAuthInfo, coverData.source[2]);
 
@@ -505,17 +545,19 @@
                                         });
                                     }
                                 });
-                                const page = {
-                                    path: book.pages[config.downloadPage].chapter.file,
-                                    number: book.pages[config.downloadPage].No,
-                                    type: book.pages[config.downloadPage].chapter.type,
-                                    size: book.pages[config.downloadPage].Size
-                                }
-                                page.url = `${book.url}${page.path}/${page.number}.${page.type}${auth.string}`;
-                                coverData.cover[id][coverData.source[2]].filePath = page.path;
-                                coverData.cover[id][coverData.source[2]].width = page.size.Width;
-                                coverData.cover[id][coverData.source[2]].height = page.size.Height;
-                                coverData.cover[id][coverData.source[2]].url = page.url;
+                                if (book.pages[config.downloadPage]) {
+                                    const page = {
+                                        path: book.pages[config.downloadPage].chapter.file,
+                                        number: book.pages[config.downloadPage].No,
+                                        type: book.pages[config.downloadPage].chapter.type,
+                                        size: book.pages[config.downloadPage].Size
+                                    }
+                                    page.url = `${book.url}${page.path}/${page.number}.${page.type}${auth.string}`;
+                                    coverData.cover[id][coverData.source[2]].filePath = page.path;
+                                    coverData.cover[id][coverData.source[2]].width = page.size.Width;
+                                    coverData.cover[id][coverData.source[2]].height = page.size.Height;
+                                    coverData.cover[id][coverData.source[2]].url = page.url;
+                                } else coverData.cover[id][coverData.source[2]].urlStatus = false;
                             }
                         }
                     }
@@ -790,7 +832,7 @@
                     check();
 
                     function check() {
-                        if (coverData.cover[id] && coverData.cover[id][source].url) {
+                        if (coverData.cover[id] && coverData.cover[id][source].url || coverData.cover[id] && coverData.cover[id][source].urlStatus === false) {
                             ++checked;
                         } else if (checked >= covers.length) {
                             resolve(checked);
@@ -1108,10 +1150,10 @@
                 border-radius: 4px;
                 margin: 2px;
             }
-            img.lazy.bookwalker-cover-downloader {
+            img.bookwalker-cover-downloader {
                 opacity: 0.5;
             }
-            img.lazy.bookwalker-cover-downloader.cover-selected {
+            img.bookwalker-cover-downloader.cover-selected {
                 opacity: 1;
             }
             a.bookwalker-cover-downloader {
