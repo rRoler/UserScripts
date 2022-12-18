@@ -185,7 +185,10 @@
                     position: static;
                 }
                 img.lazy.bookwalker-cover-downloader.cover-selected {
-                    outline: solid rgb(72, 113, 58) 4px;
+                    outline: solid #5a8d48 4px;
+                }
+                #bookwalker-cover-downloader-source-select select {
+                    background-color: #5a8d48;
                 }
             `);
         }
@@ -204,7 +207,10 @@
                 max-width: 256px;
             }
             img.lazy.bookwalker-cover-downloader.cover-selected {
-                outline: solid rgb(192, 89, 0) 4px;
+                outline: solid #ff8114 4px;
+            }
+            #bookwalker-cover-downloader-source-select select {
+                background-color: #ff8114;
             }
         `);
     }
@@ -228,6 +234,7 @@
             selected: [],
             lastSelected: undefined,
         }
+        coverData.selectable = coverData.image.length;
         const checkTimeout = 200;
         let busyDownloading = false;
         buttonData.button = {
@@ -254,6 +261,12 @@
                 text: ['Select All', 'Deselect All'],
                 execute: (button) => selectAllCovers(button),
                 element: undefined
+            },
+            setSource: {
+                id: 'bookwalker-cover-downloader-set-source',
+                text: ['Set Source'],
+                execute: (button) => setSource(button),
+                element: undefined
             }
         }
         buttonData.other = {
@@ -264,12 +277,31 @@
 
         coverSection.before(`
             <div id="bookwalker-cover-downloader-main-div" class="bookwalker-cover-downloader">
+                <div id="bookwalker-cover-downloader-source-select" class="bookwalker-cover-downloader">
+                    <select id="bookwalker-cover-downloader-source-url-select" class="bookwalker-cover-downloader"></select>
+                    <select id="bookwalker-cover-downloader-source-page-select" class="bookwalker-cover-downloader"></select>
+                </div>
                 <div id="bookwalker-cover-downloader-buttons" class="bookwalker-cover-downloader"></div>
                 <div id="bookwalker-cover-downloader-errors" class="bookwalker-cover-downloader hidden"></div>
             </div>
         `);
 
-        $.each(buttonData.button, createButton);
+        $.each(coverData.source, function (i, source) {
+            const optionElement = $(`<option value="${source}">Source: ${source}</option>`);
+            if (config.downloadSource === source) optionElement.attr('selected', 'selected');
+            $('#bookwalker-cover-downloader-source-url-select').append(optionElement);
+        });
+        $.each(new Array(bookwalkerConfig.fields.downloadPage.max + 1), function (i) {
+            const optionElement = $(`<option value="${i}">Page: ${i}</option>`);
+            if (config.downloadPage === i) optionElement.attr('selected', 'selected');
+            $('#bookwalker-cover-downloader-source-page-select').append(optionElement);
+        });
+        $.each(buttonData.button, function (i, button) {
+            if (button === buttonData.button.setSource)
+                $('#bookwalker-cover-downloader-source-select').append(createButton(i, button));
+            else
+                $('#bookwalker-cover-downloader-buttons').append(createButton(i, button));
+        });
 
         coverData.image.each(addCoverData);
 
@@ -281,11 +313,7 @@
 
         coverData.image.each(getCoverUrl);
 
-        if (config.downloadOnLoad) {
-            coverData.image.each((i, element) => selectCover($(element)));
-            coverData.image.each((i, element) => selectCover($(element), false));
-            coverData.lastSelected = undefined;
-        }
+        if (config.downloadOnLoad) downloadAll();
 
         function displayError(message) {
             const container = $('#bookwalker-cover-downloader-errors');
@@ -366,9 +394,10 @@
                 } else if (!select) {
                     element.removeClass('cover-selected');
                 }
+
                 coverData.selected = $('.bookwalker-cover-downloader.cover-selected');
 
-                if (coverData.selected.length >= coverData.image.length)
+                if (coverData.selected.length >= coverData.selectable)
                     buttonData.button.selectAll.status = buttonData.button.selectAll.text[1];
                 else
                     buttonData.button.selectAll.status = buttonData.button.selectAll.text[0];
@@ -601,7 +630,10 @@
             }
             function setCover(source, url) {
                 if (!url) {
-                    coverData.cover[id].selectable = false;
+                    if (coverData.cover[id].selectable) {
+                        --coverData.selectable;
+                        coverData.cover[id].selectable = false;
+                    }
                     coverData.cover[id].blob.url = coverData.cover[id].rimgCoverUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id].blob.url;
                     coverData.cover[id].blob.filePath = 'Failed to get cover';
@@ -653,12 +685,13 @@
             if (revert) {
                 url = coverData.cover[id].rimgCoverUrl;
                 hideClass = 'addClass';
+                coverData.cover[id].fixStatus = buttonData.other.fixCover.text[0];
             }
 
             if (config.replaceCover) {
                 element.attr(dataAttribute, url).attr('src', url).attr('srcset', url);
             }
-            if (config.showTryToFix && config.downloadSource === coverData.source[0] || config.showTryToFix && config.downloadSource === coverData.source[1]) {
+            if (config.showTryToFix && config.downloadSource === coverData.source[0] || config.showTryToFix && config.downloadSource === coverData.source[1] || revert) {
                 const fixElement = element.parent().children('.cover-fix');
 
                 fixElement[hideClass]('hidden');
@@ -703,7 +736,10 @@
 
                 function fix(revert) {
                     coverData.cover[imgElementId][coverData.source[1]].urlStatus = true;
-                    coverData.cover[imgElementId].selectable = true;
+                    if (!coverData.cover[imgElementId].selectable) {
+                        coverData.cover[imgElementId].selectable = true;
+                        ++coverData.selectable;
+                    }
                     URL.revokeObjectURL(coverData.cover[imgElementId].blob.url);
                     delete coverData.cover[imgElementId].blob.url;
                     delete coverData.cover[imgElementId][coverData.source[1]].blobUrl;
@@ -728,7 +764,6 @@
         }
         function createButton(i, button) {
             button.status = button.text[0];
-
             buttonData.button[i].element = $(`
                 <${buttonData.tag} id="${button.id}" class="${buttonData.class} bookwalker-cover-downloader">
                     <a class="bookwalker-cover-downloader">
@@ -737,15 +772,14 @@
                     </a>
                 </${buttonData.tag}>
             `)
-            $('#bookwalker-cover-downloader-buttons').append(buttonData.button[i].element);
-
-            $(`#${button.id}`).on('click', (event) => button.execute($(event.currentTarget)));
+            buttonData.button[i].element.on('click', (event) => button.execute($(event.currentTarget)));
+            return buttonData.button[i].element;
         }
-        async function coverUrlsCheck(element) {
+        async function coverUrlsCheck(element, covers = coverData.selected, source = 'blob', status = 'Downloading covers...') {
             busyDownloading = true;
             let checked = 0;
 
-            coverData.selected.each(promiseUrls);
+            covers.each(promiseUrls);
 
             return await promiseUrls();
 
@@ -756,14 +790,14 @@
                     check();
 
                     function check() {
-                        if (coverData.cover[id] && coverData.cover[id].blob.url) {
+                        if (coverData.cover[id] && coverData.cover[id][source].url) {
                             ++checked;
-                        } else if (checked >= coverData.selected.length) {
+                        } else if (checked >= covers.length) {
                             resolve(checked);
                         } else {
                             setTimeout(check, checkTimeout);
                         }
-                        displayProgress(element.children('a').children('.download-progress'), checked / coverData.selected.length * 100, 'Downloading covers...');
+                        displayProgress(element.children('a').children('.download-progress'), checked / covers.length * 100, status);
                     }
                 });
             }
@@ -774,19 +808,7 @@
                     coverUrlsCheck(button).then(function () {
                         try {
                             fn(button).then(function () {
-                                if (config.revertCoversAfterSave) {
-                                    coverData.image.each((i, element) => {
-                                        const id = $(element).attr('id');
-                                        if (coverData.cover[id].blob.url && coverData.cover[id].selectable) {
-                                            displayCover($(element), id, true);
-                                            selectCover($(element), false);
-                                            URL.revokeObjectURL(coverData.cover[id].blob.url);
-                                            delete coverData.cover[id].blob.url;
-                                            coverData.knownFileName = {};
-                                            coverData.cover[id].clicked = false;
-                                        }
-                                    });
-                                }
+                                if (config.revertCoversAfterSave) revertCovers();
                             });
                         } catch (e) {
                             busyDownloading = false;
@@ -966,6 +988,106 @@
                 coverData.lastSelected = undefined;
             }
         }
+        function setSource(button) {
+            if (!busyDownloading) {
+                const selectedUrl = $('#bookwalker-cover-downloader-source-url-select').val();
+                const selectedPage = $('#bookwalker-cover-downloader-source-page-select').val();
+                if (
+                    selectedUrl !== config.downloadSource
+                    || config.downloadSource !== coverData.source[1] && selectedPage !== config.downloadPage
+                ) {
+                    promiseUrls().then(function () {
+                        const selected = coverData.selected;
+                        const lastSelected = coverData.lastSelected;
+                        config.downloadSource = selectedUrl;
+                        config.downloadPage = selectedPage;
+                        revertCovers();
+                        if (config.downloadOnLoad) downloadAll();
+                        if (selected.length > 0) selected.each((i, element) => selectCover($(element)));
+                        coverData.lastSelected = lastSelected;
+                    });
+
+                    async function promiseUrls() {
+                        return await new Promise(function (resolve) {
+                            if (config.downloadSource === coverData.source[0]) {
+                                let checked = 0;
+                                $.each(coverData.source, function (i, source) {
+                                    if (source !== coverData.source[0]) {
+                                        promiseUrl(source).then(function () {
+                                            ++checked;
+                                            if (checked >= coverData.source.length - 1) {
+                                                if (coverData.selected.length > 0) {
+                                                    promiseUrl('blob', coverData.selected).then(function () {
+                                                        busyDownloading = false;
+                                                        resolve(true);
+                                                    });
+                                                } else {
+                                                    busyDownloading = false;
+                                                    resolve(true);
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+                            } else promiseUrl(config.downloadSource).then(function () {
+                                if (coverData.selected.length > 0) {
+                                    promiseUrl('blob', coverData.selected).then(function () {
+                                        busyDownloading = false;
+                                        resolve(true);
+                                    });
+                                } else {
+                                    busyDownloading = false;
+                                    resolve(true);
+                                }
+                            });
+                        });
+                    }
+                    async function promiseUrl(source, covers = coverData.image) {
+                        return await new Promise(function (resolve) {
+                            try {
+                                coverUrlsCheck(button, covers, source, '').then(function () {
+                                    resolve(true);
+                                });
+                            } catch (e) {
+                                busyDownloading = false;
+                                displayProgress(button.children('a').children('.download-progress'), 100);
+                                displayError(e.message);
+                            }
+                        });
+                    }
+                }
+            }
+        }
+        function revertCovers() {
+            if (!busyDownloading) {
+                coverData.image.each(function (i, element) {
+                    const id = $(element).attr('id');
+
+                    displayCover($(element), id, true);
+                    selectCover($(element), false);
+                    if (coverData.cover[id].blob.url) {
+                        URL.revokeObjectURL(coverData.cover[id].blob.url);
+                        delete coverData.cover[id].blob.url;
+                    }
+                    $.each(coverData.source, function (i, source) {
+                        if (coverData.cover[id][source] && coverData.cover[id][source].url)
+                            delete coverData.cover[id][source].url;
+                    });
+                    coverData.knownFileName = {};
+                    if (!coverData.cover[id].selectable) {
+                        coverData.cover[id].selectable = true;
+                        ++coverData.selectable;
+                    }
+                    coverData.cover[id].clicked = false;
+                    coverData.image.each(getCoverUrl);
+                });
+            }
+        }
+        function downloadAll() {
+            coverData.image.each((i, element) => selectCover($(element)));
+            coverData.image.each((i, element) => selectCover($(element), false));
+            coverData.lastSelected = undefined;
+        }
 
         GM_addStyle (css + `
             .bookwalker-cover-downloader.hidden {
@@ -1033,6 +1155,13 @@
                 text-align: center;
                 bottom: 0;
                 left: 0;
+            }
+            #bookwalker-cover-downloader-source-select select {
+                color: #fff;
+                cursor: pointer;
+                padding: 13px 12px;
+                border: unset;
+                border-radius: 4px;
             }
         `);
     }
