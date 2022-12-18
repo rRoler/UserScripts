@@ -39,7 +39,7 @@
                 'label': 'Download source:',
                 'section': ['Download Settings', '<hr>'],
                 'type': 'select',
-                'title': 'The source to downloaded the covers from.\n Automatic compares both sources and downloads from the higher quality one.\n viewer-epubs-trial.bookwalker.jp won\'t work with a paid or free book unless it has a preview.',
+                'title': 'The source to download the covers from.\n "Automatic" compares both sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" is much slower and won\'t work with a paid or free book unless it has a preview.',
                 'options': ['Automatic', 'c.bookwalker.jp', 'viewer-epubs-trial.bookwalker.jp'],
                 'default': 'Automatic'
             },
@@ -264,7 +264,7 @@
             },
             setSource: {
                 id: 'bookwalker-cover-downloader-set-source',
-                text: ['Set Source'],
+                text: ['Set Download Source'],
                 execute: (button) => setSource(button),
                 element: undefined
             }
@@ -1045,7 +1045,7 @@
                     async function promiseUrl(source, covers = coverData.image) {
                         return await new Promise(function (resolve) {
                             try {
-                                coverUrlsCheck(button, covers, source, '').then(function () {
+                                coverUrlsCheck(button, covers, source, 'Please wait...').then(function () {
                                     resolve(true);
                                 });
                             } catch (e) {
@@ -1079,7 +1079,7 @@
                         ++coverData.selectable;
                     }
                     coverData.cover[id].clicked = false;
-                    coverData.image.each(getCoverUrl);
+                    getCoverUrl(i, element);
                 });
             }
         }
