@@ -46,9 +46,9 @@
             'downloadPage': {
                 'label': 'Download preview page:',
                 'type': 'int',
-                'title': '0 = cover\n min=0, max=8.\n The page to download from the preview (viewer-epubs-trial.bookwalker.jp).',
+                'title': '0 = cover\n min=0, max=256.\n The page to download from the preview (viewer-epubs-trial.bookwalker.jp).\n If the number is bigger than the last page of the preview, the last page will be downloaded.',
                 'min': 0,
-                'max': 8,
+                'max': 256,
                 'default': 0
             },
             'downloadOnLoad': {
@@ -111,7 +111,7 @@
             'revertCoversAfterSave': {
                 'label': 'Revert covers after saving',
                 'type': 'checkbox',
-                'title': 'Reverts covers and removes blobs after saving.\n This may free up memory, but you will have to redownload the covers if you want to save them again.',
+                'title': 'Reverts covers and removes blobs after saving.\n This may free up memory even if you don\'t unload (change, close or refresh) the page, but the covers will be redownloaded if you want to save them again.',
                 'default': true
             },
             'saveAsJPEGConfirm': {
@@ -264,6 +264,7 @@
             extension: 'jpg',
             selected: [],
             lastSelected: undefined,
+            maxPage: 0
         }
         coverData.selectable = coverData.image.length;
         const checkTimeout = 200;
@@ -328,11 +329,7 @@
             if (config.downloadSource === source) optionElement.attr('selected', 'selected');
             $('#bookwalker-cover-downloader-source-url-select').append(optionElement);
         });
-        $.each(new Array(bookwalkerConfig.fields.downloadPage.max + 1), function (i) {
-            const optionElement = $(`<option value="${i}">Page: ${i}</option>`);
-            if (config.downloadPage === i) optionElement.attr('selected', 'selected');
-            $('#bookwalker-cover-downloader-source-page-select').append(optionElement);
-        });
+        createPageSelect(bookwalkerConfig.fields.downloadPage.max);
         $.each(buttonData.button, function (i, button) {
             if (button === buttonData.button.setSource)
                 $('#bookwalker-cover-downloader-source-select').append(createButton(i, button));
@@ -371,7 +368,8 @@
                 selectable: true,
                 clicked: false,
                 fixStatus: buttonData.other.fixCover.text[0],
-                rimgCoverUrl: $(element).attr(dataAttribute)
+                rimgCoverUrl: $(element).attr(dataAttribute),
+                number: i + 1
             }
 
             $(element).attr('id', id);
@@ -537,27 +535,35 @@
                                 book.chapters = rspObjData.configuration.contents;
                                 book.pages = [];
                                 $.each(book.chapters, function (i, chapter) {
-                                    if (book.pages.length <= config.downloadPage) {
-                                        $.each(rspObjData[chapter.file].FileLinkInfo.PageLinkInfoList, function (i, value) {
-                                            const page = value.Page;
-                                            page.chapter = chapter;
-                                            book.pages.push(page);
-                                        });
-                                    }
+                                    $.each(rspObjData[chapter.file].FileLinkInfo.PageLinkInfoList, function (i, value) {
+                                        const page = value.Page;
+                                        page.chapter = chapter;
+                                        book.pages.push(page);
+                                    });
                                 });
-                                if (book.pages[config.downloadPage]) {
-                                    const page = {
-                                        path: book.pages[config.downloadPage].chapter.file,
-                                        number: book.pages[config.downloadPage].No,
-                                        type: book.pages[config.downloadPage].chapter.type,
-                                        size: book.pages[config.downloadPage].Size
+
+                                let maxPageIndex = bookwalkerConfig.fields.downloadPage.max;
+                                if (!book.pages[maxPageIndex]) {
+                                    maxPageIndex = book.pages.length - 1;
+                                    if (maxPageIndex > coverData.maxPage) {
+                                        coverData.maxPage = maxPageIndex;
+                                        if (config.downloadPage > coverData.maxPage) config.downloadPage = coverData.maxPage;
+                                        createPageSelect(coverData.maxPage);
                                     }
-                                    page.url = `${book.url}${page.path}/${page.number}.${page.type}${auth.string}`;
-                                    coverData.cover[id][coverData.source[2]].filePath = page.path;
-                                    coverData.cover[id][coverData.source[2]].width = page.size.Width;
-                                    coverData.cover[id][coverData.source[2]].height = page.size.Height;
-                                    coverData.cover[id][coverData.source[2]].url = page.url;
-                                } else coverData.cover[id][coverData.source[2]].urlStatus = false;
+                                }
+                                let pageIndex = config.downloadPage;
+                                if (!book.pages[pageIndex]) pageIndex = maxPageIndex;
+                                const page = {
+                                    path: book.pages[pageIndex].chapter.file,
+                                    number: book.pages[pageIndex].No,
+                                    type: book.pages[pageIndex].chapter.type,
+                                    size: book.pages[pageIndex].Size
+                                }
+                                page.url = `${book.url}${page.path}/${page.number}.${page.type}${auth.string}`;
+                                coverData.cover[id][coverData.source[2]].filePath = page.path;
+                                coverData.cover[id][coverData.source[2]].width = page.size.Width;
+                                coverData.cover[id][coverData.source[2]].height = page.size.Height;
+                                coverData.cover[id][coverData.source[2]].url = page.url;
                             }
                         }
                     }
@@ -817,6 +823,16 @@
             buttonData.button[i].element.on('click', (event) => button.execute($(event.currentTarget)));
             return buttonData.button[i].element;
         }
+        function createPageSelect(maxPage) {
+            const pageSelectElement = $('#bookwalker-cover-downloader-source-page-select');
+
+            pageSelectElement.empty();
+            for (let i = 0; i <= maxPage; i++) {
+                const optionElement = $(`<option value="${i}">Page: ${i}</option>`);
+                if (config.downloadPage === i) optionElement.attr('selected', 'selected');
+                pageSelectElement.append(optionElement);
+            }
+        }
         async function coverUrlsCheck(element, covers = coverData.selected, source = 'blob', status = 'Downloading covers...') {
             busyDownloading = true;
             let checked = 0;
@@ -877,7 +893,6 @@
 
             function save(i, element) {
                 const id = $(element).attr('id');
-                coverData.cover[id].number = i + 1;
                 const saveFileName = getFileName({id: id});
 
                 displayProgress($(element).parent().children('.download-progress'), 0, 'Saving Cover...');
@@ -947,7 +962,6 @@
 
             function zipCover(i, element) {
                 const id = $(element).attr('id');
-                coverData.cover[id].number = i + 1;
                 const saveFileName = getFileName({id: id});
 
                 zip.file(saveFileName, coverToPromise(id), {binary: true});
