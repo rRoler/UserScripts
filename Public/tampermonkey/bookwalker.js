@@ -2,7 +2,7 @@
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
 // @version      0.9.9-dev
-// @description  Select covers on the https://bookwalker.jp/series/*/list/* or https://global.bookwalker.jp/series/* page and download them.
+// @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
 // @match        https://r18.bookwalker.jp/*
@@ -30,7 +30,7 @@
 (function() {
     'use strict';
 
-    let needsReload = false;
+    let config = {};
     const bookwalkerConfig = {
         'id': 'bookwalker-cover-downloader-config',
         'title': 'BookWalker Cover Downloader',
@@ -75,7 +75,7 @@
             },
             'imageFileNameMask': {
                 'label': 'Image filename:',
-                'section': ['File Saving Settings', '<b>For images, zips, folders and links:</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>For images, folders and links:</b><br> %volumeTitle% = Title of the book/volume<br> %number% = Increasing number<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> <b>Only for links:</b><br> %coverURL% = URL of the cover image<br> %newLine% = Adds a new line'],
+                'section': ['File Saving Settings', '<b>For images, zips, folders and links:</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>For images, folders and links:</b><br> %volumeTitle% = Title of the volume/book<br> %number% = Increasing number<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> <b>Only for links:</b><br> %coverURL% = URL of the cover image<br> %newLine% = Adds a new line'],
                 'type': 'text',
                 'title': '',
                 'size': 128,
@@ -147,17 +147,59 @@
                 'title': 'Show a hyperlink that links to the new cover.',
                 'default': true
             },
-            'redirectSeriesPages': {
-                'label': 'Redirect the series page to list',
-                'section': ['BookWalker Japan Settings', 'https://bookwalker.jp/'],
+            'bwJpEnableSeriesListPages': {
+                'label': 'Enable series list pages',
+                'section': ['BookWalker Japan Settings', '<a href="https://bookwalker.jp" target="_blank" rel="noopener noreferrer">https://bookwalker.jp</a>'],
+                'type': 'checkbox',
+                'title': 'Run the script on series list pages.',
+                'default': true
+            },
+            'bwJpRedirectSeriesPages': {
+                'label': 'Redirect series pages to series list pages',
                 'type': 'checkbox',
                 'title': 'Redirect the series pages to the series list pages.',
+                'default': true
+            },
+            'bwJpEnableSeriesPages': {
+                'label': 'Enable series pages',
+                'type': 'checkbox',
+                'title': 'Run the script on series pages (if the above option is disabled).',
+                'default': true
+            },
+            'bwJpEnableSeriesWayomiPages': {
+                'label': 'Enable Wayomi series pages',
+                'type': 'checkbox',
+                'title': 'Run the script on Wayomi series pages.',
+                'default': true
+            },
+            'bwJpEnableVolumePages': {
+                'label': 'Enable volume pages',
+                'type': 'checkbox',
+                'title': 'Run the script on volume/book pages.',
+                'default': true
+            },
+            'bwGlEnableSeriesPages': {
+                'label': 'Enable series pages',
+                'section': ['BookWalker Global Settings', '<a href="https://global.bookwalker.jp" target="_blank" rel="noopener noreferrer">https://global.bookwalker.jp</a>'],
+                'type': 'checkbox',
+                'title': 'Run the script on series pages.',
+                'default': true
+            },
+            'bwGlEnableVolumePages': {
+                'label': 'Enable volume pages',
+                'type': 'checkbox',
+                'title': 'Run the script on volume/book pages.',
                 'default': true
             }
         },
         'events': {
-            'save': () => needsReload = true,
-            'close': () => needsReload ? location.reload():false
+            'init': () => config = loadConfig(),
+            'close': () => {
+                for (const i in config) {
+                    const newConfig = loadConfig();
+                    if (config[i] !== newConfig[i]) return location.reload();
+                }
+            }
         }
     }
     GM_config.init(bookwalkerConfig);
@@ -187,17 +229,66 @@
                background-color: #5a8d48;
            }`
     }
-    if (window.location.href.search(/https:\/\/bookwalker.jp\/series\/.*/gi) > -1 || window.location.href.search(/https:\/\/r18.bookwalker.jp\/series\/.*/gi) > -1) {
-        if (window.location.href.search(/https:\/\/.*\/series\/.*\/list\/.*/gi) <= -1) {
-            const wayomiCoverSection = $('.p-content-top');
-            if (wayomiCoverSection) {
-                // TODO
-            }
-            if (GM_config.get('redirectSeriesPages') && $(`a[href="${window.location.href}list/"]`).length > 0)
-                return window.location.replace(`${window.location.href}list/`);
-        } else return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+    if (/https:\/\/bookwalker.jp\/series\/.*/.test(window.location.href) || /https:\/\/r18.bookwalker.jp\/series\/.*/.test(window.location.href)) {
+        if (config.bwJpEnableSeriesListPages && /https:\/\/.*\/series\/.*\/list\/.*/.test(window.location.href))
+            return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+        const wayomiCoverSection = $('#js-episode-list').first();
+        if (config.bwJpEnableSeriesWayomiPages && wayomiCoverSection.length > 0) {
+            wayomiCoverSection.find('.o-ttsk-list-item').each((i, element) => {
+                const links = $(element).find('a');
+                const innerElements = links.children();
+
+                innerElements.find('img.lazy').wrap(`<a data-uuid="${links.attr('data-book-uuid')}"></a>`);
+                links.remove();
+                innerElements.find('.o-ttsk-list-item__right').wrap(links.clone().empty().attr('style', 'width: 100%;'));
+                $(element).append(innerElements);
+            });
+            bookwalkerCoverDownloaderPageConfig.titleSection = $('.o-ttsk-card__title').text();
+            bookwalkerCoverDownloaderPageConfig.coverSection = wayomiCoverSection;
+            bookwalkerCoverDownloaderPageConfig.imageSelector = wayomiCoverSection.find('img.lazy');
+            bookwalkerCoverDownloaderPageConfig.css = `
+               button.bookwalker-cover-downloader.a-basic-btn--secondary {
+                   margin: 2px;
+                   display: inline-block;
+                   max-width: 256px;
+                   height: fit-content;
+               }
+               a.bookwalker-cover-downloader {
+                   position: sticky;
+                   margin: 8px;
+               }
+               img.bookwalker-cover-downloader {
+                   max-width: 252px;
+                   max-height: 246px;
+               }
+               img.bookwalker-cover-downloader.cover-selected {
+                   outline: solid #5a8d48 4px;
+               }
+               #bookwalker-cover-downloader-source-select select {
+                   background-color: #5a8d48;
+               }
+            `;
+            return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+        }
+
+        if (config.bwJpRedirectSeriesPages && $(`a[href="${window.location.href}list/"]`).length > 0)
+            return window.location.replace(`${window.location.href}list/`);
+
+        const seriesCoverSection = $('#sec-series').first();
+        if (config.bwJpEnableSeriesPages && seriesCoverSection.length > 0) {
+            seriesCoverSection.find('.bw_box-main.md_box-product').each((i, element) => {
+                const link = $(element).find('.product-hdg').children('a').first();
+
+                $(element).find('img').parent().attr('data-uuid', link.attr('href').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)[0]);
+            });
+            bookwalkerCoverDownloaderPageConfig.dataAttribute = 'src';
+            bookwalkerCoverDownloaderPageConfig.titleSection = $('.overview-hdg-txt').text();
+            bookwalkerCoverDownloaderPageConfig.coverSection = seriesCoverSection;
+            bookwalkerCoverDownloaderPageConfig.imageSelector = seriesCoverSection.find('a > img');
+            return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+        }
     }
-    if (window.location.href.search(/https:\/\/bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) > -1) {
+    if (config.bwJpEnableVolumePages && /https:\/\/bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
         bookwalkerCoverDownloaderPageConfig.titleSection = $('.p-main__title').text();
         bookwalkerCoverDownloaderPageConfig.coverSection = $('.p-main').first();
         bookwalkerCoverDownloaderPageConfig.singleCover = true;
@@ -225,12 +316,12 @@
             background-color: #ff8114;
         }`
     }
-    if (window.location.href.search(/https:\/\/global.bookwalker.jp\/series\/.*/gi) > -1) {
+    if (config.bwGlEnableSeriesPages && /https:\/\/global.bookwalker.jp\/series\/.*/.test(window.location.href)) {
         return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
     }
-    if (window.location.href.search(/https:\/\/global.bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) > -1) {
+    if (config.bwGlEnableVolumePages && /https:\/\/global.bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
         bookwalkerCoverDownloaderPageConfig.dataAttribute = 'src';
-        bookwalkerCoverDownloaderPageConfig.titleSection = $('.detail-book-title.clearfix').children('h1')[0].firstChild.textContent;
+        bookwalkerCoverDownloaderPageConfig.titleSection = $('.detail-book-title.clearfix').children('h1').get(0).firstChild.textContent;
         bookwalkerCoverDownloaderPageConfig.coverSection = $('.wrap.clearfix').first();
         bookwalkerCoverDownloaderPageConfig.singleCover = true;
         bookwalkerCoverDownloaderPageConfig.imageSelector = $('.book-img').children('a').children('img');
@@ -238,6 +329,13 @@
     }
     return false;
 
+    function loadConfig() {
+        const config = {};
+        $.each(bookwalkerConfig.fields, (i) => {
+            config[i] = GM_config.get(i);
+        });
+        return config;
+    }
     function bookwalkerCoverDownloader({
        dataAttribute,
        titleSection,
@@ -247,15 +345,13 @@
        singleCover = false,
        imageSelector = $('img.lazy')
     }) {
-        const config = {};
-        $.each(bookwalkerConfig.fields, function (i) {
-            config[i] = GM_config.get(i);
-        });
+        const config = loadConfig();
         const concurrentDownloads = {
             max: config.maxConcurrentDownloads,
             count: 0
         }
         const saveAsNameRegex = /[\\\/:"*?<>|]/gi;
+        const thumbnailIdRegex = /^\D+|\D+$/gi;
         const coverData = {
             image: singleCover ? imageSelector.first():imageSelector,
             source: bookwalkerConfig.fields.downloadSource.options,
@@ -273,32 +369,27 @@
             downloadAsJpeg: {
                 id: 'bookwalker-cover-downloader-download-as-jpeg',
                 text: ['Save Covers Individually'],
-                execute: (button) => saveCovers(saveCoversAsJPEG, button),
-                element: undefined
+                execute: (button) => saveCovers(saveCoversAsJPEG, button)
             },
             downloadAsZip: {
                 id: 'bookwalker-cover-downloader-download-as-zip',
                 text: ['Save Covers Inside a ZIP'],
-                execute: (button) => saveCovers(saveCoversAsZIP, button),
-                element: undefined
+                execute: (button) => saveCovers(saveCoversAsZIP, button)
             },
             copyLinks: {
                 id: 'bookwalker-cover-downloader-copy-links',
                 text: ['Copy Cover Links'],
-                execute: (button) => saveCovers(copyCoverLinks, button),
-                element: undefined
+                execute: (button) => saveCovers(copyCoverLinks, button)
             },
             selectAll: {
                 id: 'bookwalker-cover-downloader-select-all',
                 text: ['Select All', 'Deselect All'],
-                execute: (button) => selectAllCovers(button),
-                element: undefined
+                execute: (button) => selectAllCovers(button)
             },
             setSource: {
                 id: 'bookwalker-cover-downloader-set-source',
                 text: ['Set Download Source'],
-                execute: (button) => setSource(button),
-                element: undefined
+                execute: (button) => setSource(button)
             }
         }
         if (singleCover) {
@@ -324,13 +415,13 @@
             </div>
         `);
 
-        $.each(coverData.source, function (i, source) {
+        $.each(coverData.source, (i, source) => {
             const optionElement = $(`<option value="${source}">Source: ${source}</option>`);
             if (config.downloadSource === source) optionElement.attr('selected', 'selected');
             $('#bookwalker-cover-downloader-source-url-select').append(optionElement);
         });
         createPageSelect(bookwalkerConfig.fields.downloadPage.max);
-        $.each(buttonData.button, function (i, button) {
+        $.each(buttonData.button, (i, button) => {
             if (button === buttonData.button.setSource)
                 $('#bookwalker-cover-downloader-source-select').append(createButton(i, button));
             else
@@ -361,14 +452,14 @@
         function addCoverData(i, element) {
             const id = `bookwalker-cover-downloader-cover-${i}`;
             coverData.cover[id] = {
-                title: singleCover ? titleSection:$(element).attr('title'),
+                title: singleCover ? titleSection:$(element).attr('alt'),
                 blob: {},
                 [coverData.source[1]]: {},
                 [coverData.source[2]]: {},
                 selectable: true,
                 clicked: false,
                 fixStatus: buttonData.other.fixCover.text[0],
-                rimgCoverUrl: $(element).attr(dataAttribute),
+                coverThumbnailUrl: $(element).attr(dataAttribute),
                 number: i + 1
             }
 
@@ -413,37 +504,36 @@
             }
         }
         function selectCover(element, select = true) {
-            if (!busyDownloading) {
-                const id = element.attr('id');
+            if (busyDownloading) return false;
+            const id = element.attr('id');
 
-                if (coverData.cover[id].selectable) coverData.lastSelected = element;
-                if (select && coverData.cover[id].selectable) {
-                    element.addClass('cover-selected');
+            if (coverData.cover[id].selectable) coverData.lastSelected = element;
+            if (select && coverData.cover[id].selectable) {
+                element.addClass('cover-selected');
 
-                    if (!coverData.cover[id].clicked) {
-                        try {
-                            getBestQualityCover(element);
-                        } catch (e) {
-                            displayError(e.message);
-                        }
+                if (!coverData.cover[id].clicked) {
+                    try {
+                        getBestQualityCover(element);
+                    } catch (e) {
+                        displayError(e.message);
                     }
-                } else if (!select) {
-                    element.removeClass('cover-selected');
                 }
+            } else if (!select) {
+                element.removeClass('cover-selected');
+            }
 
-                coverData.selected = $('.bookwalker-cover-downloader.cover-selected');
+            coverData.selected = $('.bookwalker-cover-downloader.cover-selected');
 
-                if (!singleCover) {
-                    if (coverData.selected.length >= coverData.selectable)
-                        buttonData.button.selectAll.status = buttonData.button.selectAll.text[1];
-                    else
-                        buttonData.button.selectAll.status = buttonData.button.selectAll.text[0];
-                    buttonData.button.selectAll.element.children('a').children('.button-text').text(buttonData.button.selectAll.status);
-                }
+            if (!singleCover) {
+                if (coverData.selected.length >= coverData.selectable)
+                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[1];
+                else
+                    buttonData.button.selectAll.status = buttonData.button.selectAll.text[0];
+                $('#bookwalker-cover-downloader-select-all').children('a').children('.button-text').text(buttonData.button.selectAll.status);
             }
         }
         async function readyToDownload() {
-            return await new Promise(function (resolve) {
+            return await new Promise((resolve) => {
                 check();
 
                 function check() {
@@ -497,13 +587,13 @@
                 get: (url, fn, source) => AJAXRequest(url, 'json', fn, $(element), 'Getting cover URL...', source)
             }
 
-            getUrl[coverData.source[1]] = function () {
-                const url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[id].rimgCoverUrl.split('/')[3].split('').reverse().join('')) - 1)}.${coverData.extension}`;
+            getUrl[coverData.source[1]] = () => {
+                const url = /thumbnailImage/.test(coverData.cover[id].coverThumbnailUrl) ? `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[id].coverThumbnailUrl.split('/')[3].replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`:`https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[id].coverThumbnailUrl.split('/')[3].split('').reverse().join('')) - 1)}.${coverData.extension}`;
 
                 coverData.cover[id][coverData.source[1]].url = url;
             }
-            getUrl[coverData.source[2]] = function () {
-                const uuid = singleCover ? window.location.href.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi):!$(element).parent().attr('data-uuid') ? $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, ''):$(element).parent().attr('data-uuid');
+            getUrl[coverData.source[2]] = () => {
+                const uuid = singleCover ? window.location.href.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi)[0]:!$(element).parent().attr('data-uuid') ? $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, ''):$(element).parent().attr('data-uuid');
 
                 getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${uuid}&BID=0`, getAuthInfo, coverData.source[2]);
 
@@ -534,8 +624,8 @@
                             } else {
                                 book.chapters = rspObjData.configuration.contents;
                                 book.pages = [];
-                                $.each(book.chapters, function (i, chapter) {
-                                    $.each(rspObjData[chapter.file].FileLinkInfo.PageLinkInfoList, function (i, value) {
+                                $.each(book.chapters, (i, chapter) => {
+                                    $.each(rspObjData[chapter.file].FileLinkInfo.PageLinkInfoList, (i, value) => {
                                         const page = value.Page;
                                         page.chapter = chapter;
                                         book.pages.push(page);
@@ -571,7 +661,7 @@
             }
 
             if (config.downloadSource === coverData.source[0]) {
-                $.each(coverData.source, function (i, source) {
+                $.each(coverData.source, (i, source) => {
                     if (source !== coverData.source[0]) {
                         try {
                             coverData.cover[id][source].urlStatus = true;
@@ -603,17 +693,17 @@
             }
             coverData.cover[id].clicked = true;
 
-            getCover[coverData.source[1]] = function (rspObj) {
+            getCover[coverData.source[1]] = (rspObj) => {
                 if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/i)) {
                     coverData.cover[id][coverData.source[1]].urlStatus = false;
                 } else if (rspObj.status === 403 && retry403.count < retry403.max) {
-                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(/^\D+|\D+$/g, '') - 1))}.${coverData.extension}`, getCover[coverData.source[1]], coverData.source[1]);
+                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`, getCover[coverData.source[1]], coverData.source[1]);
                     ++retry403.count;
                 } else {
                     const blobUrl = window.URL.createObjectURL(rspObj.response);
                     const image = new Image;
                     image.src = blobUrl;
-                    image.onload = function () {
+                    image.onload = () => {
                         const filePath = rspObj.finalUrl.replace(/https:\/\//, '');
 
                         coverData.cover[id][coverData.source[1]].filePath = filePath;
@@ -624,7 +714,7 @@
                     };
                 }
             }
-            getCover[coverData.source[2]] = function (rspObj) {
+            getCover[coverData.source[2]] = (rspObj) => {
                 if (rspObj.status !== 200) {
                     coverData.cover[id][coverData.source[2]].urlStatus = false;
                 } else {
@@ -634,14 +724,14 @@
             }
 
             if (config.downloadSource === coverData.source[0]) {
-                download(coverData.source[1], function (source, url) {
+                download(coverData.source[1], (source, url) => {
                     const source1 = coverData.source[1];
                     const source2 = coverData.source[2];
 
                     if (!url) {
                         download(source2);
                     } else {
-                        promiseUrl(source2, 'url').then(function (url) {
+                        promiseUrl(source2, 'url').then((url) => {
                             if (!url) {
                                 setCover(source1, coverData.cover[id][source1].urlStatus);
                             } else {
@@ -667,7 +757,7 @@
             }
 
             function download(source, fn = setCover) {
-                promiseUrl(source, 'url').then(function (url) {
+                promiseUrl(source, 'url').then((url) => {
                     if (!url) {
                         fn(source, url);
                     } else {
@@ -682,7 +772,7 @@
                         --coverData.selectable;
                         coverData.cover[id].selectable = false;
                     }
-                    coverData.cover[id].blob.url = coverData.cover[id].rimgCoverUrl;
+                    coverData.cover[id].blob.url = coverData.cover[id].coverThumbnailUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id].blob.url;
                     coverData.cover[id].blob.filePath = 'Failed to get cover';
                     coverData.cover[id].blob.fileName = 'Failed to get cover';
@@ -700,7 +790,7 @@
                     coverData.cover[id].blob.width = coverData.cover[id][source].width;
                     coverData.cover[id].blob.height = coverData.cover[id][source].height;
                 }
-                $.each(coverData.source, function (i, source) {
+                $.each(coverData.source, (i, source) => {
                     if (coverData.cover[id][source] && coverData.cover[id][source].blobUrl) {
                         if (coverData.cover[id][source].blobUrl !== coverData.cover[id].blob.url)
                             URL.revokeObjectURL(coverData.cover[id][source].blobUrl);
@@ -710,7 +800,7 @@
                 displayCover(element, id);
             }
             async function promiseUrl(source, url) {
-                return await new Promise(function (resolve) {
+                return await new Promise((resolve) => {
                     check();
 
                     function check() {
@@ -731,7 +821,7 @@
             let url = coverData.cover[id].blob.url;
             let hideClass = 'removeClass'
             if (revert) {
-                url = coverData.cover[id].rimgCoverUrl;
+                url = coverData.cover[id].coverThumbnailUrl;
                 hideClass = 'addClass';
                 coverData.cover[id].fixStatus = buttonData.other.fixCover.text[0];
             }
@@ -771,48 +861,47 @@
             }
         }
         function fixCover(element) {
-            if (!busyDownloading) {
-                const currentElement = $(element.currentTarget);
-                const imgElement = currentElement.parent().parent().children('img');
-                const imgElementId = imgElement.attr('id');
+            if (busyDownloading) return false;
+            const currentElement = $(element.currentTarget);
+            const imgElement = currentElement.parent().parent().children('img');
+            const imgElementId = imgElement.attr('id');
 
-                if (coverData.cover[imgElementId].fixStatus === buttonData.other.fixCover.text[0]) {
-                    fix();
-                } else if (coverData.cover[imgElementId].fixStatus === buttonData.other.fixCover.text[1]) {
-                    fix(true);
+            if (coverData.cover[imgElementId].fixStatus === buttonData.other.fixCover.text[0]) {
+                fix();
+            } else if (coverData.cover[imgElementId].fixStatus === buttonData.other.fixCover.text[1]) {
+                fix(true);
+            }
+
+            function fix(revert) {
+                coverData.cover[imgElementId][coverData.source[1]].urlStatus = true;
+                if (!coverData.cover[imgElementId].selectable) {
+                    coverData.cover[imgElementId].selectable = true;
+                    ++coverData.selectable;
                 }
+                URL.revokeObjectURL(coverData.cover[imgElementId].blob.url);
+                delete coverData.cover[imgElementId].blob.url;
+                delete coverData.cover[imgElementId][coverData.source[1]].blobUrl;
 
-                function fix(revert) {
-                    coverData.cover[imgElementId][coverData.source[1]].urlStatus = true;
-                    if (!coverData.cover[imgElementId].selectable) {
-                        coverData.cover[imgElementId].selectable = true;
-                        ++coverData.selectable;
-                    }
-                    URL.revokeObjectURL(coverData.cover[imgElementId].blob.url);
-                    delete coverData.cover[imgElementId].blob.url;
-                    delete coverData.cover[imgElementId][coverData.source[1]].blobUrl;
+                if (revert) {
+                    coverData.cover[imgElementId][coverData.source[1]].url = coverData.cover[imgElementId][coverData.source[1]].oldUrl;
+                    coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[3];
+                } else {
+                    coverData.cover[imgElementId][coverData.source[1]].oldUrl = coverData.cover[imgElementId][coverData.source[1]].url;
+                    coverData.cover[imgElementId][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[imgElementId][coverData.source[1]].url.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`;
+                    coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[2];
+                }
+                currentElement.text(coverData.cover[imgElementId].fixStatus);
 
-                    if (revert) {
-                        coverData.cover[imgElementId][coverData.source[1]].url = coverData.cover[imgElementId][coverData.source[1]].oldUrl;
-                        coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[3];
-                    } else {
-                        coverData.cover[imgElementId][coverData.source[1]].oldUrl = coverData.cover[imgElementId][coverData.source[1]].url;
-                        coverData.cover[imgElementId][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[imgElementId][coverData.source[1]].url.replace(/^\D+|\D+$/g, '') - 1))}.${coverData.extension}`;
-                        coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[2];
-                    }
-                    currentElement.text(coverData.cover[imgElementId].fixStatus);
-
-                    try {
-                        getBestQualityCover(imgElement);
-                    } catch (e) {
-                        displayError(e.message);
-                    }
+                try {
+                    getBestQualityCover(imgElement);
+                } catch (e) {
+                    displayError(e.message);
                 }
             }
         }
         function createButton(i, button) {
             button.status = button.text[0];
-            buttonData.button[i].element = $(`
+            const element = $(`
                 <${buttonData.tag} id="${button.id}" class="${buttonData.class} bookwalker-cover-downloader">
                     <a class="bookwalker-cover-downloader">
                         <span class="bookwalker-cover-downloader button-text">${button.status}</span>
@@ -820,8 +909,8 @@
                     </a>
                 </${buttonData.tag}>
             `)
-            buttonData.button[i].element.on('click', (event) => button.execute($(event.currentTarget)));
-            return buttonData.button[i].element;
+            element.on('click', (event) => button.execute($(event.currentTarget)));
+            return element;
         }
         function createPageSelect(maxPage) {
             const pageSelectElement = $('#bookwalker-cover-downloader-source-page-select');
@@ -844,7 +933,7 @@
             function promiseUrls(i, selectedElement) {
                 const id = $(selectedElement).attr('id');
 
-                return new Promise(function (resolve) {
+                return new Promise((resolve) => {
                     check();
 
                     function check() {
@@ -861,23 +950,22 @@
             }
         }
         function saveCovers(fn, button) {
-            if (coverData.selected.length > 0 && !busyDownloading) {
-                try {
-                    coverUrlsCheck(button).then(function () {
-                        try {
-                            fn(button).then(function () {
-                                if (config.revertCoversAfterSave) revertCovers();
-                            });
-                        } catch (e) {
-                            busyDownloading = false;
-                            displayError(e.message);
-                        }
-                    });
-                } catch (e) {
-                    busyDownloading = false;
-                    displayProgress(button.children('a').children('.download-progress'), 100);
-                    displayError(e.message);
-                }
+            if (coverData.selected.length <= 0 || busyDownloading) return false;
+            try {
+                coverUrlsCheck(button).then(() => {
+                    try {
+                        fn(button).then(() => {
+                            if (config.revertCoversAfterSave) revertCovers();
+                        });
+                    } catch (e) {
+                        busyDownloading = false;
+                        displayError(e.message);
+                    }
+                });
+            } catch (e) {
+                busyDownloading = false;
+                displayProgress(button.children('a').children('.download-progress'), 100);
+                displayError(e.message);
             }
         }
         async function saveCoversAsJPEG() {
@@ -967,8 +1055,8 @@
                 zip.file(saveFileName, coverToPromise(id), {binary: true});
             }
             function coverToPromise(id) {
-                return new Promise(function (resolve, reject) {
-                    JSZipUtils.getBinaryContent(coverData.cover[id].blob.url, function (error, config) {
+                return new Promise((resolve, reject) => {
+                    JSZipUtils.getBinaryContent(coverData.cover[id].blob.url, (error, config) => {
                         if (error) {
                             busyDownloading = false;
                             coverData.cover[id].clicked = false;
@@ -1017,7 +1105,7 @@
             }
 
             let fileName = string
-            $.each(masks, function (i, argument) {
+            $.each(masks, (i, argument) => {
                 fileName = fileName.replaceAll(`%${i}%`, argument);
             })
 
@@ -1035,109 +1123,106 @@
             return fileName;
         }
         function selectAllCovers() {
-            if (!busyDownloading) {
-                if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[1]) {
-                    coverData.image.each((i, element) => selectCover($(element), false));
-                } else if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[0]) {
-                    coverData.image.each((i, element) => selectCover($(element)));
-                }
-                coverData.lastSelected = undefined;
+            if (busyDownloading) return false;
+            if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[1]) {
+                coverData.image.each((i, element) => selectCover($(element), false));
+            } else if (buttonData.button.selectAll.status === buttonData.button.selectAll.text[0]) {
+                coverData.image.each((i, element) => selectCover($(element)));
             }
+            coverData.lastSelected = undefined;
         }
         function setSource(button) {
-            if (!busyDownloading) {
-                const selectedUrl = $('#bookwalker-cover-downloader-source-url-select').val();
-                const selectedPage = $('#bookwalker-cover-downloader-source-page-select').val();
-                if (
-                    selectedUrl !== config.downloadSource
-                    || config.downloadSource !== coverData.source[1] && selectedPage !== config.downloadPage
-                ) {
-                    promiseUrls().then(function () {
-                        const selected = coverData.selected;
-                        const lastSelected = coverData.lastSelected;
-                        config.downloadSource = selectedUrl;
-                        config.downloadPage = selectedPage;
-                        revertCovers();
-                        if (config.downloadOnLoad) downloadAll();
-                        if (selected.length > 0) selected.each((i, element) => selectCover($(element)));
-                        coverData.lastSelected = lastSelected;
-                    });
+            if (busyDownloading) return false;
+            const selectedUrl = $('#bookwalker-cover-downloader-source-url-select').val();
+            const selectedPage = $('#bookwalker-cover-downloader-source-page-select').val();
+            if (
+                selectedUrl !== config.downloadSource
+                || config.downloadSource !== coverData.source[1] && selectedPage !== config.downloadPage
+            ) {
+                promiseUrls().then(() => {
+                    const selected = coverData.selected;
+                    const lastSelected = coverData.lastSelected;
+                    config.downloadSource = selectedUrl;
+                    config.downloadPage = selectedPage;
+                    revertCovers();
+                    if (config.downloadOnLoad) downloadAll();
+                    if (selected.length > 0) selected.each((i, element) => selectCover($(element)));
+                    coverData.lastSelected = lastSelected;
+                });
 
-                    async function promiseUrls() {
-                        return await new Promise(function (resolve) {
-                            if (config.downloadSource === coverData.source[0]) {
-                                let checked = 0;
-                                $.each(coverData.source, function (i, source) {
-                                    if (source !== coverData.source[0]) {
-                                        promiseUrl(source).then(function () {
-                                            ++checked;
-                                            if (checked >= coverData.source.length - 1) {
-                                                if (coverData.selected.length > 0) {
-                                                    promiseUrl('blob', coverData.selected).then(function () {
-                                                        busyDownloading = false;
-                                                        resolve(true);
-                                                    });
-                                                } else {
+                async function promiseUrls() {
+                    return await new Promise((resolve) => {
+                        if (config.downloadSource === coverData.source[0]) {
+                            let checked = 0;
+                            $.each(coverData.source, (i, source) => {
+                                if (source !== coverData.source[0]) {
+                                    promiseUrl(source).then(() => {
+                                        ++checked;
+                                        if (checked >= coverData.source.length - 1) {
+                                            if (coverData.selected.length > 0) {
+                                                promiseUrl('blob', coverData.selected).then(() => {
                                                     busyDownloading = false;
                                                     resolve(true);
-                                                }
+                                                });
+                                            } else {
+                                                busyDownloading = false;
+                                                resolve(true);
                                             }
-                                        });
-                                    }
-                                });
-                            } else promiseUrl(config.downloadSource).then(function () {
-                                if (coverData.selected.length > 0) {
-                                    promiseUrl('blob', coverData.selected).then(function () {
-                                        busyDownloading = false;
-                                        resolve(true);
+                                        }
                                     });
-                                } else {
-                                    busyDownloading = false;
-                                    resolve(true);
                                 }
                             });
-                        });
-                    }
-                    async function promiseUrl(source, covers = coverData.image) {
-                        return await new Promise(function (resolve) {
-                            try {
-                                coverUrlsCheck(button, covers, source, 'Please wait...').then(function () {
+                        } else promiseUrl(config.downloadSource).then(() => {
+                            if (coverData.selected.length > 0) {
+                                promiseUrl('blob', coverData.selected).then(() => {
+                                    busyDownloading = false;
                                     resolve(true);
                                 });
-                            } catch (e) {
+                            } else {
                                 busyDownloading = false;
-                                displayProgress(button.children('a').children('.download-progress'), 100);
-                                displayError(e.message);
+                                resolve(true);
                             }
                         });
-                    }
+                    });
+                }
+                async function promiseUrl(source, covers = coverData.image) {
+                    return await new Promise((resolve) => {
+                        try {
+                            coverUrlsCheck(button, covers, source, 'Please wait...').then(() => {
+                                resolve(true);
+                            });
+                        } catch (e) {
+                            busyDownloading = false;
+                            displayProgress(button.children('a').children('.download-progress'), 100);
+                            displayError(e.message);
+                        }
+                    });
                 }
             }
         }
         function revertCovers() {
-            if (!busyDownloading) {
-                coverData.image.each(function (i, element) {
-                    const id = $(element).attr('id');
+            if (busyDownloading) return false;
+            coverData.image.each((i, element) => {
+                const id = $(element).attr('id');
 
-                    displayCover($(element), id, true);
-                    selectCover($(element), false);
-                    if (coverData.cover[id].blob.url) {
-                        URL.revokeObjectURL(coverData.cover[id].blob.url);
-                        delete coverData.cover[id].blob.url;
-                    }
-                    $.each(coverData.source, function (i, source) {
-                        if (coverData.cover[id][source] && coverData.cover[id][source].url)
-                            delete coverData.cover[id][source].url;
-                    });
-                    coverData.knownFileName = {};
-                    if (!coverData.cover[id].selectable) {
-                        coverData.cover[id].selectable = true;
-                        ++coverData.selectable;
-                    }
-                    coverData.cover[id].clicked = false;
-                    getCoverUrl(i, element);
+                displayCover($(element), id, true);
+                selectCover($(element), false);
+                if (coverData.cover[id].blob.url) {
+                    URL.revokeObjectURL(coverData.cover[id].blob.url);
+                    delete coverData.cover[id].blob.url;
+                }
+                $.each(coverData.source, (i, source) => {
+                    if (coverData.cover[id][source] && coverData.cover[id][source].url)
+                        delete coverData.cover[id][source].url;
                 });
-            }
+                coverData.knownFileName = {};
+                if (!coverData.cover[id].selectable) {
+                    coverData.cover[id].selectable = true;
+                    ++coverData.selectable;
+                }
+                coverData.cover[id].clicked = false;
+                getCoverUrl(i, element);
+            });
         }
         function downloadAll() {
             coverData.image.each((i, element) => selectCover($(element)));
@@ -1189,6 +1274,7 @@
             }
             .bookwalker-cover-downloader.cover-data a {
                 color: white;
+                height: fit-content;
             }
             .bookwalker-cover-downloader.cover-data.cover-size {
                 width: fit-content;
