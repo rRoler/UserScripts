@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      0.9.9-dev
+// @version      0.9.9
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -119,7 +119,7 @@
                 'title': '0 = disabled\n min=0, max=64.\n Ask for confirmation before saving more than this number of covers.',
                 'min': 0,
                 'max': 64,
-                'default': 0
+                'default': 4
             },
             'replaceCover': {
                 'label': 'Replace cover',
@@ -975,58 +975,76 @@
             }
         }
         async function saveCoversAsJPEG() {
-            busyDownloading = false;
+            return await new Promise((resolve, reject) => {
+                busyDownloading = true;
 
-            if (coverData.selected.length > config.saveAsJPEGConfirm && config.saveAsJPEGConfirm > 0) {
-                if (confirm(`You are about to save more than ${config.saveAsJPEGConfirm} covers!`)) {
-                    await coverData.selected.each(save);
-                }
-            } else {
-                await coverData.selected.each(save);
-            }
-
-            function save(i, element) {
-                const id = $(element).attr('id');
-                const saveFileName = getFileName({id: id});
-
-                displayProgress($(element).parent().children('.download-progress'), 0, 'Saving Cover...');
-                readyToDownload().then(download);
-
-                function download() {
-                    if (config.imageSaveLocationCheck) {
-                        GM_download({
-                            url: coverData.cover[id].blob.coverUrl,
-                            name: getFileName({
-                                id: id,
-                                string: config.imageSaveLocation,
-                                filterName: false
-                            }) + saveFileName,
-                            saveAs: false,
-                            onload: onLoad,
-                            onabort: handleError,
-                            onerror: handleError,
-                            ontimeout: handleError
-                        });
-
-                        function onLoad() {
-                            --concurrentDownloads.count;
-                            displayProgress($(element).parent().children('.download-progress'), 100);
-                        }
+                if (coverData.selected.length > config.saveAsJPEGConfirm && config.saveAsJPEGConfirm > 0) {
+                    if (confirm(`You are about to save more than ${config.saveAsJPEGConfirm} covers!`)) {
+                        coverData.selected.each(save);
                     } else {
-                        handleError();
+                        busyDownloading = false;
+                        return resolve(false);
                     }
-                    function handleError() {
-                        --concurrentDownloads.count;
-                        try {
-                            saveAs(coverData.cover[id].blob.blob, saveFileName);
-                        } catch (e) {
-                            displayError(`${coverData.cover[id].title} ${saveFileName} ${coverData.cover[id].blob.url} ${e.message}`);
-                        } finally {
-                            displayProgress($(element).parent().children('.download-progress'), 100);
+                } else {
+                    coverData.selected.each(save);
+                }
+
+                let saved = 0;
+                function save(i, element) {
+                    const id = $(element).attr('id');
+                    const saveFileName = getFileName({id: id});
+
+                    displayProgress($(element).parent().children('.download-progress'), 0, 'Saving Cover...');
+                    readyToDownload().then(download);
+
+                    function download() {
+                        if (config.imageSaveLocationCheck) {
+                            GM_download({
+                                url: coverData.cover[id].blob.coverUrl,
+                                name: getFileName({
+                                    id: id,
+                                    string: config.imageSaveLocation,
+                                    filterName: false
+                                }) + saveFileName,
+                                saveAs: false,
+                                onload: onLoad,
+                                onabort: handleError,
+                                onerror: handleError,
+                                ontimeout: handleError
+                            });
+
+                            function onLoad() {
+                                --concurrentDownloads.count;
+                                displayProgress($(element).parent().children('.download-progress'), 100);
+                                ++saved;
+                                if (saved >= coverData.selected.length) {
+                                    busyDownloading = false;
+                                    return resolve(true);
+                                }
+                            }
+                        } else {
+                            handleError();
+                        }
+                        function handleError() {
+                            --concurrentDownloads.count;
+                            try {
+                                saveAs(coverData.cover[id].blob.url, saveFileName);
+                                ++saved;
+                                if (saved >= coverData.selected.length) {
+                                    busyDownloading = false;
+                                    return resolve(true);
+                                }
+                            } catch (e) {
+                                busyDownloading = false;
+                                displayError(`${coverData.cover[id].title} ${saveFileName} ${coverData.cover[id].blob.url} ${e.message}`);
+                                return reject(e);
+                            } finally {
+                                displayProgress($(element).parent().children('.download-progress'), 100);
+                            }
                         }
                     }
                 }
-            }
+            });
         }
         async function saveCoversAsZIP(button) {
             return await new Promise((resolve, reject) => {
@@ -1074,8 +1092,8 @@
 
                         zip.add(file);
                         file.push(data, true);
-                        displayProgress(button.children('a').children('.download-progress'), pushedFiles / coverData.selected.length * 100, 'Zipping covers...');
                         ++pushedFiles;
+                        displayProgress(button.children('a').children('.download-progress'), pushedFiles / coverData.selected.length * 100, 'Zipping covers...');
                         if (pushedFiles >= coverData.selected.length) {
                             zip.end();
                         }
