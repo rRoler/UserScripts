@@ -9,8 +9,7 @@
 // @match        https://global.bookwalker.jp/*
 // @icon         https://bookwalker.jp/favicon.ico
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip-utils/0.1.0/jszip-utils.min.js
+// @require      https://unpkg.com/fflate
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @updateURL    https://raw.githubusercontent.com/rRoler/UserScripts/master/Public/tampermonkey/bookwalker.js
@@ -706,6 +705,7 @@
                     image.onload = () => {
                         const filePath = rspObj.finalUrl.replace(/https:\/\//, '');
 
+                        coverData.cover[id][coverData.source[1]].blob = rspObj.response;
                         coverData.cover[id][coverData.source[1]].filePath = filePath;
                         coverData.cover[id][coverData.source[1]].url = rspObj.finalUrl;
                         coverData.cover[id][coverData.source[1]].width = image.width;
@@ -718,6 +718,7 @@
                 if (rspObj.status !== 200) {
                     coverData.cover[id][coverData.source[2]].urlStatus = false;
                 } else {
+                    coverData.cover[id][coverData.source[2]].blob = rspObj.response;
                     coverData.cover[id][coverData.source[2]].url = rspObj.finalUrl;
                     coverData.cover[id][coverData.source[2]].blobUrl = window.URL.createObjectURL(rspObj.response);
                 }
@@ -772,6 +773,7 @@
                         --coverData.selectable;
                         coverData.cover[id].selectable = false;
                     }
+                    coverData.cover[id].blob.blob = new Blob([new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,6,0,0,0,31,21,196,137,0,0,0,13,73,68,65,84,8,91,99,248,207,192,240,31,0,5,0,1,255,23,81,112,6,0,0,0,0,73,69,78,68,174,66,96,130])], {type: 'image/png'});
                     coverData.cover[id].blob.url = coverData.cover[id].coverThumbnailUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id].blob.url;
                     coverData.cover[id].blob.filePath = 'Failed to get cover';
@@ -782,6 +784,7 @@
                     selectCover(element, false);
                     displayError(`Failed to get the cover of ${coverData.cover[id].title} from ${source}`);
                 } else {
+                    coverData.cover[id].blob.blob = coverData.cover[id][source].blob;
                     coverData.cover[id].blob.url = coverData.cover[id][source].blobUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id][source].url;
                     coverData.cover[id].blob.filePath = coverData.cover[id][source].filePath.replace(/\.[^.]*$/, '');
@@ -795,6 +798,7 @@
                         if (coverData.cover[id][source].blobUrl !== coverData.cover[id].blob.url)
                             URL.revokeObjectURL(coverData.cover[id][source].blobUrl);
                         delete coverData.cover[id][source].blobUrl;
+                        delete coverData.cover[id][source].blob;
                     }
                 });
                 displayCover(element, id);
@@ -880,7 +884,9 @@
                 }
                 URL.revokeObjectURL(coverData.cover[imgElementId].blob.url);
                 delete coverData.cover[imgElementId].blob.url;
+                delete coverData.cover[imgElementId].blob.blob;
                 delete coverData.cover[imgElementId][coverData.source[1]].blobUrl;
+                delete coverData.cover[imgElementId][coverData.source[1]].blob;
 
                 if (revert) {
                     coverData.cover[imgElementId][coverData.source[1]].url = coverData.cover[imgElementId][coverData.source[1]].oldUrl;
@@ -1012,7 +1018,7 @@
                     function handleError() {
                         --concurrentDownloads.count;
                         try {
-                            saveAs(coverData.cover[id].blob.url, saveFileName);
+                            saveAs(coverData.cover[id].blob.blob, saveFileName);
                         } catch (e) {
                             displayError(`${coverData.cover[id].title} ${saveFileName} ${coverData.cover[id].blob.url} ${e.message}`);
                         } finally {
@@ -1023,53 +1029,60 @@
             }
         }
         async function saveCoversAsZIP(button) {
-            busyDownloading = true;
-            const zip = new JSZip();
+            return await new Promise((resolve, reject) => {
+                busyDownloading = true;
 
-            coverData.selected.each(zipCover);
+                const title = titleSection.replace(saveAsNameRegex, '');
+                const saveFileName = getFileName({
+                    string: config.zipFileNameMask,
+                    extension: 'zip'
+                });
+                const chunks = [];
+                const zip = new fflate.Zip((err, chunk, final) => {
+                    if (err) {
+                        busyDownloading = false;
 
-            await zip.generateAsync({type:'blob', streamFiles: true}, function updateCallback(metaconfig) {
-                displayProgress(button.children('a').children('.download-progress'), metaconfig.percent, 'Zipping covers...');
-            })
-                .then(function callback(blob) {
-                    busyDownloading = false;
-                    const title = titleSection.replace(saveAsNameRegex, '');
-                    const saveFileName = getFileName({
-                        string: config.zipFileNameMask,
-                        extension: 'zip'
-                    });
-
-                    try {
-                        saveAs(blob, saveFileName);
-                    } catch (e) {
-                        displayError(`${title} ${saveFileName} ${e.message}`);
-                    } finally {
+                        displayError(`${title} ${saveFileName} ${err}`);
                         displayProgress(button.children('a').children('.download-progress'), 100);
+                        reject(err);
+                    } else chunks.push(chunk);
+                    if (final) {
+                        busyDownloading = false;
+
+                        try {
+                            saveAs(new Blob(chunks), saveFileName);
+                            resolve(true);
+                        } catch (e) {
+                            displayError(`${title} ${saveFileName} ${e.message}`);
+                            reject(e);
+                        } finally {
+                            displayProgress(button.children('a').children('.download-progress'), 100);
+                        }
                     }
                 });
 
-            function zipCover(i, element) {
-                const id = $(element).attr('id');
-                const saveFileName = getFileName({id: id});
+                coverData.selected.each(zipCover);
 
-                zip.file(saveFileName, coverToPromise(id), {binary: true});
-            }
-            function coverToPromise(id) {
-                return new Promise((resolve, reject) => {
-                    JSZipUtils.getBinaryContent(coverData.cover[id].blob.url, (error, config) => {
-                        if (error) {
-                            busyDownloading = false;
-                            coverData.cover[id].clicked = false;
+                let pushedFiles = 0;
+                async function zipCover(i, element) {
+                    const id = $(element).attr('id');
+                    const saveFileName = getFileName({id: id});
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const data = new Uint8Array(event.target.result);
+                        const file = new fflate.ZipPassThrough(saveFileName);
 
-                            displayError(`${error} ${coverData.cover[id].title} ${coverData.cover[id].blob.coverUrl}`);
-
-                            reject(error);
-                        } else {
-                            resolve(config);
+                        zip.add(file);
+                        file.push(data, true);
+                        displayProgress(button.children('a').children('.download-progress'), pushedFiles / coverData.selected.length * 100, 'Zipping covers...');
+                        ++pushedFiles;
+                        if (pushedFiles >= coverData.selected.length) {
+                            zip.end();
                         }
-                    });
-                });
-            }
+                    };
+                    reader.readAsArrayBuffer(coverData.cover[id].blob.blob);
+                }
+            });
         }
         async function copyCoverLinks() {
             busyDownloading = false;
@@ -1210,10 +1223,13 @@
                 if (coverData.cover[id].blob.url) {
                     URL.revokeObjectURL(coverData.cover[id].blob.url);
                     delete coverData.cover[id].blob.url;
+                    delete coverData.cover[id].blob.blob;
                 }
                 $.each(coverData.source, (i, source) => {
-                    if (coverData.cover[id][source] && coverData.cover[id][source].url)
+                    if (coverData.cover[id][source] && coverData.cover[id][source].url) {
                         delete coverData.cover[id][source].url;
+                        delete coverData.cover[id][source].blob;
+                    }
                 });
                 coverData.knownFileName = {};
                 if (!coverData.cover[id].selectable) {
