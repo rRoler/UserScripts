@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      0.9.9.1
+// @version      0.9.9.2
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -239,7 +239,7 @@
 
                 innerElements.find('img.lazy').wrap(`<a data-uuid="${links.attr('data-book-uuid')}"></a>`);
                 links.remove();
-                innerElements.find('.o-ttsk-list-item__right').wrap(links.clone().empty().attr('style', 'width: 100%;'));
+                innerElements.find('.o-ttsk-list-item__right').wrap(links.clone().empty().css('width', '100%'));
                 $(element).append(innerElements);
             });
             bookwalkerCoverDownloaderPageConfig.titleSection = $('.o-ttsk-card__title').text();
@@ -961,7 +961,14 @@
                 coverUrlsCheck(button).then(() => {
                     try {
                         fn(button).then(() => {
+                            busyDownloading = false;
+                            coverData.knownFileName = {};
+                            displayProgress(button.children('a').children('.download-progress'), 100);
                             if (config.revertCoversAfterSave) revertCovers();
+                        }).catch(() => {
+                            busyDownloading = false;
+                            coverData.knownFileName = {};
+                            displayProgress(button.children('a').children('.download-progress'), 100);
                         });
                     } catch (e) {
                         busyDownloading = false;
@@ -982,7 +989,6 @@
                     if (confirm(`You are about to save more than ${config.saveAsJPEGConfirm} covers!`)) {
                         coverData.selected.each(save);
                     } else {
-                        busyDownloading = false;
                         return resolve(false);
                     }
                 } else {
@@ -1018,7 +1024,6 @@
                                 displayProgress($(element).parent().children('.download-progress'), 100);
                                 ++saved;
                                 if (saved >= coverData.selected.length) {
-                                    busyDownloading = false;
                                     return resolve(true);
                                 }
                             }
@@ -1031,15 +1036,11 @@
                                 saveAs(coverData.cover[id].blob.url, saveFileName);
                                 ++saved;
                                 if (saved >= coverData.selected.length) {
-                                    busyDownloading = false;
                                     return resolve(true);
                                 }
                             } catch (e) {
-                                busyDownloading = false;
                                 displayError(`${coverData.cover[id].title} ${saveFileName} ${coverData.cover[id].blob.url} ${e.message}`);
                                 return reject(e);
-                            } finally {
-                                displayProgress($(element).parent().children('.download-progress'), 100);
                             }
                         }
                     }
@@ -1058,23 +1059,16 @@
                 const chunks = [];
                 const zip = new fflate.Zip((err, chunk, final) => {
                     if (err) {
-                        busyDownloading = false;
-
                         displayError(`${title} ${saveFileName} ${err}`);
-                        displayProgress(button.children('a').children('.download-progress'), 100);
                         reject(err);
                     } else chunks.push(chunk);
                     if (final) {
-                        busyDownloading = false;
-
                         try {
                             saveAs(new Blob(chunks, {type: 'application/zip'}), saveFileName);
                             resolve(true);
                         } catch (e) {
                             displayError(`${title} ${saveFileName} ${e.message}`);
                             reject(e);
-                        } finally {
-                            displayProgress(button.children('a').children('.download-progress'), 100);
                         }
                     }
                 });
@@ -1098,12 +1092,16 @@
                             zip.end();
                         }
                     };
-                    reader.readAsArrayBuffer(coverData.cover[id].blob.blob);
+                    try {
+                        reader.readAsArrayBuffer(coverData.cover[id].blob.blob);
+                    } catch (e) {
+                        displayError(`${title} ${saveFileName} ${e.message}`);
+                        reject(e);
+                    }
                 }
             });
         }
         async function copyCoverLinks() {
-            busyDownloading = false;
             let links = '';
             coverData.selected.each((i, element) => {
                 const id = $(element).attr('id');
@@ -1171,6 +1169,7 @@
                 || config.downloadSource !== coverData.source[1] && selectedPage !== config.downloadPage
             ) {
                 promiseUrls().then(() => {
+                    busyDownloading = false;
                     const selected = coverData.selected;
                     const lastSelected = coverData.lastSelected;
                     config.downloadSource = selectedUrl;
@@ -1183,6 +1182,12 @@
 
                 async function promiseUrls() {
                     return await new Promise((resolve) => {
+                        let clickedCovers = [];
+                        $.each(coverData.image, (i, element) => {
+                            const id = $(element).attr('id');
+                            if (coverData.cover[id].clicked) clickedCovers.push(element);
+                        });
+                        clickedCovers = $(clickedCovers);
                         if (config.downloadSource === coverData.source[0]) {
                             let checked = 0;
                             $.each(coverData.source, (i, source) => {
@@ -1190,29 +1195,17 @@
                                     promiseUrl(source).then(() => {
                                         ++checked;
                                         if (checked >= coverData.source.length - 1) {
-                                            if (coverData.selected.length > 0) {
-                                                promiseUrl('blob', coverData.selected).then(() => {
-                                                    busyDownloading = false;
-                                                    resolve(true);
-                                                });
-                                            } else {
-                                                busyDownloading = false;
+                                            promiseUrl('blob', clickedCovers).then(() => {
                                                 resolve(true);
-                                            }
+                                            });
                                         }
                                     });
                                 }
                             });
                         } else promiseUrl(config.downloadSource).then(() => {
-                            if (coverData.selected.length > 0) {
-                                promiseUrl('blob', coverData.selected).then(() => {
-                                    busyDownloading = false;
-                                    resolve(true);
-                                });
-                            } else {
-                                busyDownloading = false;
+                            promiseUrl('blob', clickedCovers).then(() => {
                                 resolve(true);
-                            }
+                            });
                         });
                     });
                 }
@@ -1233,6 +1226,7 @@
         }
         function revertCovers() {
             if (busyDownloading) return false;
+            coverData.knownFileName = {};
             coverData.image.each((i, element) => {
                 const id = $(element).attr('id');
 
@@ -1249,7 +1243,6 @@
                         delete coverData.cover[id][source].blob;
                     }
                 });
-                coverData.knownFileName = {};
                 if (!coverData.cover[id].selectable) {
                     coverData.cover[id].selectable = true;
                     ++coverData.selectable;
