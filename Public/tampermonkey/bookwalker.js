@@ -1,17 +1,17 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      0.9.9
+// @version      0.9.9.1
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
 // @match        https://r18.bookwalker.jp/*
 // @match        https://global.bookwalker.jp/*
 // @icon         https://bookwalker.jp/favicon.ico
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js
-// @require      https://unpkg.com/fflate
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.3/jquery.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
-// @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
+// @require      https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js
+// @require      https://openuserjs.org/src/libs/sizzle/GM_config.min.js
 // @updateURL    https://raw.githubusercontent.com/rRoler/UserScripts/master/Public/tampermonkey/bookwalker.js
 // @downloadURL  https://raw.githubusercontent.com/rRoler/UserScripts/master/Public/tampermonkey/bookwalker.js
 // @supportURL   https://github.com/rRoler/UserScripts/issues
@@ -74,7 +74,7 @@
             },
             'imageFileNameMask': {
                 'label': 'Image filename:',
-                'section': ['File Saving Settings', '<b>For images, zips, folders and links:</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>For images, folders and links:</b><br> %volumeTitle% = Title of the volume/book<br> %number% = Increasing number<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> <b>Only for links:</b><br> %coverURL% = URL of the cover image<br> %newLine% = Adds a new line'],
+                'section': ['File Saving Settings', '<b>For images, zips, folders and links:</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>For images, folders and links:</b><br> %volumeTitle% = Title of the volume/book<br> %number% = An increasing number based on the html image element order<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> <b>Only for links:</b><br> %coverURL% = URL of the cover image<br> %newLine% = Adds a new line'],
                 'type': 'text',
                 'title': '',
                 'size': 128,
@@ -1068,7 +1068,7 @@
                         busyDownloading = false;
 
                         try {
-                            saveAs(new Blob(chunks), saveFileName);
+                            saveAs(new Blob(chunks, {type: 'application/zip'}), saveFileName);
                             resolve(true);
                         } catch (e) {
                             displayError(`${title} ${saveFileName} ${e.message}`);
