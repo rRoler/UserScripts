@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      0.9.9.2
+// @version      0.9.9.3
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -30,13 +30,58 @@
     'use strict';
 
     let config = {};
+    const configId = 'bookwalker-cover-downloader-config';
     const bookwalkerConfig = {
-        'id': 'bookwalker-cover-downloader-config',
+        'id': configId,
         'title': 'BookWalker Cover Downloader',
+        'css': `
+            #${configId} * {
+                font-family: "Hiragino Kaku Gothic ProN","ヒラギノ角ゴ ProN","Hiragino Sans",Arial,Meiryo,メイリオ,sans-serif !important;
+                font-size: 14px !important;
+                border: solid transparent 4px !important;
+                border-radius: 8px !important;
+            }
+            #${configId} .config_header {
+                font-size: 20pt !important;
+            }
+            #${configId} .section_header {
+                font-size: 13pt !important;
+            }
+            #${configId} input[type="text"] {
+                max-width: 100% !important;
+                box-shadow: 0 0 2px #000 !important;
+            }
+            #${configId}_section_4 {
+                margin-bottom: 128px !important;
+            }
+            #${configId}_buttons_holder {
+                background-color: #FFF !important;
+                box-shadow: 0 0 8px #000 !important;
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                max-height: 128px !important;
+                border: none !important;
+                display: flex !important;
+                flex-wrap: wrap !important;
+                text-align: center !important;
+            }
+            #${configId}_buttons_holder * {
+                cursor: pointer !important;
+                flex-grow: 1 !important;
+            }
+            #${configId} .reset_holder {
+                width: 100% !important;
+            }
+            #${configId}_resetLink {
+                color: FF0000 !important;
+            }
+        `,
         'fields': {
             'downloadSource': {
                 'label': 'Download source:',
-                'section': ['Download Settings', '<hr>'],
+                'section': ['Download Settings', ''],
                 'type': 'select',
                 'title': 'The source to download the covers from.\n "Automatic" compares both sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" is much slower and won\'t work with a paid or free book unless it has a preview.',
                 'options': ['Automatic', 'c.bookwalker.jp', 'viewer-epubs-trial.bookwalker.jp'],
@@ -70,15 +115,15 @@
                 'title': 'min=0, max=16.\n Maximum number of times to change the cover URL and try to download the cover if the expected URL is wrong.',
                 'min': 0,
                 'max': 16,
-                'default': 4
+                'default': 8
             },
             'imageFileNameMask': {
                 'label': 'Image filename:',
-                'section': ['File Saving Settings', '<b>For images, zips, folders and links:</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>For images, folders and links:</b><br> %volumeTitle% = Title of the volume/book<br> %number% = An increasing number based on the html image element order<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> <b>Only for links:</b><br> %coverURL% = URL of the cover image<br> %newLine% = Adds a new line'],
+                'section': ['File Saving Settings', '<b>For images, zips, folders and links:</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>For images, folders and links:</b><br> %volumeTitle% = Title of the volume/book<br> %volumeNumber% = Number of the volume/book or title if there is none<br> %number% = An increasing number based on the html image element order<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> <b>Only for links:</b><br> %coverURL% = URL of the cover image<br> %newLine% = Adds a new line'],
                 'type': 'text',
                 'title': '',
                 'size': 128,
-                'default': '%volumeTitle%.%fileExtension%'
+                'default': '%volumeNumber%.%fileExtension%'
             },
             'zipFileNameMask': {
                 'label': 'Zip filename:',
@@ -92,7 +137,7 @@
                 'type': 'text',
                 'title': '',
                 'size': 128,
-                'default': '[%volumeTitle%](%coverURL%)%newLine%'
+                'default': '[%volumeNumber%](%coverURL%)%newLine%'
             },
             'imageSaveLocationCheck': {
                 'label': 'Image save location',
@@ -123,7 +168,7 @@
             },
             'replaceCover': {
                 'label': 'Replace cover',
-                'section': ['UI Settings', '<hr>'],
+                'section': ['UI Settings', ''],
                 'type': 'checkbox',
                 'title': 'Replace the existing cover with the new one.',
                 'default': true
@@ -192,7 +237,17 @@
             }
         },
         'events': {
-            'init': () => config = loadConfig(),
+            'init': () => {
+                config = loadConfig()
+                $(document.body).on('click', () => {
+                    if (GM_config.isOpen) GM_config.close();
+                });
+            },
+            'open': () => {
+                $(GM_config.frame).css('border', 'none');
+                $(GM_config.frame).css('border-radius', '8px');
+                $(GM_config.frame).css('box-shadow', '0 0 256px #000');
+            },
             'close': () => {
                 for (const i in config) {
                     const newConfig = loadConfig();
@@ -1126,6 +1181,7 @@
             if (id) {
                 masks.elementId = id;
                 masks.volumeTitle = coverData.cover[id].title;
+                masks.volumeNumber = parseVolumeNumber() || masks.volumeTitle;
                 masks.number = coverData.cover[id].number;
                 masks.fileName = coverData.cover[id].blob.fileName;
                 masks.fileNameId = coverData.cover[id].blob.fileNameId;
@@ -1147,6 +1203,15 @@
                 } else {
                     coverData.knownFileName[fileName] = 0;
                 }
+            }
+
+            function parseVolumeNumber() {
+                let volumeString = masks.volumeTitle;
+                const japaneseCharacters = '０１２３４５６７８９'.split('');
+                $.each(japaneseCharacters, (i, character) => volumeString = volumeString.replaceAll(character, i));
+                let volumeNumber = volumeString.match(/\d+/g);
+                volumeNumber = volumeNumber ? volumeNumber.pop() : undefined;
+                return volumeNumber ? `Volume ${volumeNumber}` : undefined;
             }
 
             return fileName;
