@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      0.9.9.4
+// @version      0.9.9.5
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -41,15 +41,21 @@
                 border: solid transparent 4px !important;
                 border-radius: 8px !important;
             }
-            #${configId} select {
-                background-color: #dedede !important;
-                cursor: pointer !important;
-            }
             #${configId} .config_header {
                 font-size: 20pt !important;
             }
             #${configId} .section_header {
                 font-size: 13pt !important;
+            }
+            #${configId} label {
+                cursor: help !important;
+            }
+            #${configId} select {
+                background-color: #dedede !important;
+                cursor: pointer !important;
+            }
+            #${configId} input[type="checkbox"] {
+                cursor: pointer !important;
             }
             #${configId} input[type="text"] {
                 max-width: 100% !important;
@@ -79,10 +85,10 @@
                 cursor: pointer !important;
             }
             #${configId}_buttons_holder button:hover {
-                background-image: linear-gradient(rgb(0 0 0/40%) 0 0) !important;
+                background-image: linear-gradient(rgb(0 0 0/25%) 0 0) !important;
             }
             #${configId}_buttons_holder button:active {
-                background-image: linear-gradient(rgb(0 0 0/20%) 0 0) !important;
+                background-image: linear-gradient(rgb(0 0 0/10%) 0 0) !important;
             }
             #${configId} .reset_holder {
                 width: 100% !important;
