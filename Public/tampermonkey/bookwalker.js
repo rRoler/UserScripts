@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      0.9.9.5
+// @version      0.9.9.6
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -139,11 +139,11 @@
             },
             'imageFileNameMask': {
                 'label': 'Image filename:',
-                'section': ['File Saving Settings', '<b>For images, zips, folders and links:</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>For images, folders and links:</b><br> %volumeTitle% = Title of the volume/book<br> %volumeNumber% = Number of the volume/book or title if there is none<br> %number% = An increasing number based on the html image element order<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> <b>Only for links:</b><br> %coverURL% = URL of the cover image<br> %newLine% = Adds a new line'],
+                'section': ['File Saving Settings', '<b>For images, zips, folders and links:</b><br> %seriesTitle% = Title of the series<br> %fileExtension% = Extension of the file<br> <b>For images, folders and links:</b><br> %volumeTitle% = Title of the volume/book<br> %volumeNumber% = Number of the volume/book<br> %volume% = "Volume %volumeNumber%" or "%volumeTitle%" if %volumeNumber% is none<br> %volumePageNumber% = Number of the page in the volume/book<br> %volumePage% = "Page %volumePageNumber%" or nothing if %volumePageNumber% is none or 0<br> %number% = An increasing number based on the html image element order<br> %fileName% = Name of the file from the image URL<br> %fileNameId% = The id of the file from the image URL<br> %elementId% = Id of the html image element<br> <b>Only for links:</b><br> %coverURL% = URL of the cover image<br> %newLine% = Adds a new line'],
                 'type': 'text',
                 'title': '',
                 'size': 128,
-                'default': '%volumeNumber%.%fileExtension%'
+                'default': '%volume% %volumePage%.%fileExtension%'
             },
             'zipFileNameMask': {
                 'label': 'Zip filename:',
@@ -157,7 +157,7 @@
                 'type': 'text',
                 'title': '',
                 'size': 128,
-                'default': '[%volumeNumber%](%coverURL%)%newLine%'
+                'default': '[%volume%](%coverURL%)%newLine%'
             },
             'imageSaveLocationCheck': {
                 'label': 'Image save location',
@@ -723,6 +723,7 @@
                                     type: book.pages[pageIndex].chapter.type,
                                     size: book.pages[pageIndex].Size
                                 }
+                                coverData.cover[id][coverData.source[2]].pageNumber = pageIndex;
                                 page.url = `${book.url}${page.path}/${page.number}.${page.type}${auth.string}`;
                                 coverData.cover[id][coverData.source[2]].filePath = page.path;
                                 coverData.cover[id][coverData.source[2]].width = page.size.Width;
@@ -856,6 +857,7 @@
                     coverData.cover[id].blob.fileNameId = 'Failed to get cover';
                     coverData.cover[id].blob.width = 0;
                     coverData.cover[id].blob.height = 0;
+                    coverData.cover[id].blob.pageNumber = undefined;
                     selectCover(element, false);
                     displayError(`Failed to get the cover of ${coverData.cover[id].title} from ${source}`);
                 } else {
@@ -867,6 +869,7 @@
                     coverData.cover[id].blob.fileNameId = coverData.cover[id].blob.fileName.replace('coverImage_', '');
                     coverData.cover[id].blob.width = coverData.cover[id][source].width;
                     coverData.cover[id].blob.height = coverData.cover[id][source].height;
+                    coverData.cover[id].blob.pageNumber = coverData.cover[id][source].pageNumber;
                 }
                 $.each(coverData.source, (i, source) => {
                     if (coverData.cover[id][source] && coverData.cover[id][source].blobUrl) {
@@ -1201,7 +1204,11 @@
             if (id) {
                 masks.elementId = id;
                 masks.volumeTitle = coverData.cover[id].title;
-                masks.volumeNumber = parseVolumeNumber() || masks.volumeTitle;
+                masks.volumeNumber = parseVolumeNumber() || '0';
+                masks.volume = parseVolume() || masks.volumeTitle;
+                masks.volumePageNumber =
+                    coverData.cover[id].blob.pageNumber !== undefined ? coverData.cover[id].blob.pageNumber : '0';
+                masks.volumePage = parseVolumePage() || '';
                 masks.number = coverData.cover[id].number;
                 masks.fileName = coverData.cover[id].blob.fileName;
                 masks.fileNameId = coverData.cover[id].blob.fileNameId;
@@ -1216,10 +1223,13 @@
 
             if (filterName) {
                 fileName.replace(saveAsNameRegex, '');
+                const extensionIndex = fileName.lastIndexOf(`.${extension}`);
+                const fileNameName = fileName.substring(0, extensionIndex).trim();
+                const fileNameExtension = fileName.substring(extensionIndex);
+                fileName = `${fileNameName}${fileNameExtension}`;
 
                 if (coverData.knownFileName[fileName] > -1) {
-                    const extensionIndex = fileName.lastIndexOf(`.${extension}`);
-                    fileName = `${fileName.substring(0, extensionIndex)}(${++coverData.knownFileName[fileName]})${fileName.substring(extensionIndex)}`;
+                    fileName = `${fileNameName}(${++coverData.knownFileName[fileName]})${fileNameExtension}`;
                 } else {
                     coverData.knownFileName[fileName] = 0;
                 }
@@ -1231,7 +1241,17 @@
                 $.each(japaneseCharacters, (i, character) => volumeString = volumeString.replaceAll(character, i));
                 let volumeNumber = volumeString.match(/\d+/g);
                 volumeNumber = volumeNumber ? volumeNumber.pop() : undefined;
+                return volumeNumber;
+            }
+
+            function parseVolume() {
+                const volumeNumber = parseVolumeNumber();
                 return volumeNumber ? `Volume ${volumeNumber}` : undefined;
+            }
+
+            function parseVolumePage() {
+                const pageNumber = coverData.cover[id].blob.pageNumber;
+                return pageNumber && parseInt(pageNumber) !== 0 ? `Page ${pageNumber}` : undefined;
             }
 
             return fileName;
