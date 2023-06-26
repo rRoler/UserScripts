@@ -26,7 +26,7 @@
 // @run-at       document-end
 // ==/UserScript==
 
-(function() {
+(async function() {
     'use strict';
 
     let config = {};
@@ -258,7 +258,7 @@
         },
         'events': {
             'init': () => {
-                config = loadConfig()
+                config = loadConfig();
                 $(document.body).on('click', () => {
                     if (GM_config.isOpen) GM_config.close();
                 });
@@ -276,7 +276,7 @@
             }
         }
     }
-    GM_config.init(bookwalkerConfig);
+    await GM_config.init(bookwalkerConfig);
     GM_registerMenuCommand('Settings', () => GM_config.open());
 
     let bookwalkerCoverDownloaderPageConfig = {
@@ -370,7 +370,7 @@
     }
     bookwalkerCoverDownloaderPageConfig = {
         dataAttribute: 'data-srcset',
-        titleSection: $('.title-main-inner').text().split('\n                            ')[1],
+        titleSection: $('.title-main-inner').text().trim(),
         coverSection: $('.o-tile-list').first(),
         buttonData: {
             tag: 'p',
