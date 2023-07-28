@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      0.9.9.8
+// @version      1.0
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
 // @match        https://r18.bookwalker.jp/*
 // @match        https://global.bookwalker.jp/*
 // @icon         https://bookwalker.jp/favicon.ico
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.3/jquery.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.0/jquery.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
-// @require      https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js
+// @require      https://cdn.jsdelivr.net/npm/fflate@0.8.0/umd/index.js
 // @require      https://openuserjs.org/src/libs/sizzle/GM_config.min.js
 // @updateURL    https://raw.githubusercontent.com/rRoler/UserScripts/master/Public/tampermonkey/bookwalker.js
 // @downloadURL  https://raw.githubusercontent.com/rRoler/UserScripts/master/Public/tampermonkey/bookwalker.js
@@ -811,7 +811,11 @@
 
                 promiseUrl(source2, 'url').then((source2Url) => {
                     if (!source2Url) return download(source1);
-                    if (config.downloadPage > 0) return download(source2);
+                    if (config.downloadPage > 0) return download(source2, (source, source2Url) => {
+                        if (!source2Url) return download(source1);
+                        setCover(source2, coverData.cover[id][source2].urlStatus);
+                    });
+
                     download(source1, (source, source1Url) => {
                         if (!source1Url) return download(source2);
                         if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
