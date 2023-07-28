@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      0.9.9.7
+// @version      0.9.9.8
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -281,8 +281,8 @@
 
     let bookwalkerCoverDownloaderPageConfig = {
         dataAttribute: 'data-original',
-        titleSection: $('.o-contents-section__title').text(),
-        coverSection: $('.o-contents-section__body').first(),
+        titleSection: undefined,
+        coverSection: undefined,
         buttonData: {
             tag: 'button',
             class: 'a-basic-btn--secondary'
@@ -304,8 +304,11 @@
            }`
     }
     if (/https:\/\/bookwalker.jp\/series\/.*/.test(window.location.href) || /https:\/\/r18.bookwalker.jp\/series\/.*/.test(window.location.href)) {
-        if (config.bwJpEnableSeriesListPages && /https:\/\/.*\/series\/.*\/list\/.*/.test(window.location.href))
+        if (config.bwJpEnableSeriesListPages && /https:\/\/.*\/series\/.*\/list\/.*/.test(window.location.href)) {
+            bookwalkerCoverDownloaderPageConfig.titleSection = $('.o-contents-section__title').text();
+            bookwalkerCoverDownloaderPageConfig.coverSection = $('.o-contents-section__body').first();
             return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+        }
         const wayomiCoverSection = $('#js-episode-list').first();
         if (config.bwJpEnableSeriesWayomiPages && wayomiCoverSection.length > 0) {
             wayomiCoverSection.find('.o-ttsk-list-item').each((i, element) => {
@@ -370,8 +373,8 @@
     }
     bookwalkerCoverDownloaderPageConfig = {
         dataAttribute: 'data-srcset',
-        titleSection: $('.title-main-inner').text().trim(),
-        coverSection: $('.o-tile-list').first(),
+        titleSection: undefined,
+        coverSection: undefined,
         buttonData: {
             tag: 'p',
             class: 'btn-cart-add btn-box m-b40'
@@ -391,6 +394,8 @@
         }`
     }
     if (config.bwGlEnableSeriesPages && /https:\/\/global.bookwalker.jp\/series\/.*/.test(window.location.href)) {
+        bookwalkerCoverDownloaderPageConfig.titleSection = $('.title-main-inner').text().trim();
+        bookwalkerCoverDownloaderPageConfig.coverSection = $('.o-tile-list').first();
         return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
     }
     if (config.bwGlEnableVolumePages && /https:\/\/global.bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
@@ -801,33 +806,27 @@
             }
 
             if (config.downloadSource === coverData.source[0]) {
-                download(coverData.source[1], (source, url) => {
-                    const source1 = coverData.source[1];
-                    const source2 = coverData.source[2];
+                const source1 = coverData.source[1];
+                const source2 = coverData.source[2];
 
-                    if (!url) {
-                        download(source2);
-                    } else {
-                        promiseUrl(source2, 'url').then((url) => {
-                            if (!url) {
-                                setCover(source1, coverData.cover[id][source1].urlStatus);
-                            } else {
-                                if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
-                                    if (coverData.cover[id][source1].width * coverData.cover[id][source1].height - coverData.cover[id][source2].width * coverData.cover[id][source2].height === 144000
-                                        && coverData.cover[id][source1].height === 1200
-                                        && coverData.cover[id][source2].height === 1200
-                                        && coverData.cover[id][source1].width <= 964
-                                        && coverData.cover[id][source2].width <= 844) {
-                                        download(source2);
-                                    } else {
-                                        setCover(source1, coverData.cover[id][source1].urlStatus);
-                                    }
-                                } else if (coverData.cover[id][source1].width * coverData.cover[id][source1].height < coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
-                                    download(source2);
-                                }
-                            }
-                        });
-                    }
+                promiseUrl(source2, 'url').then((source2Url) => {
+                    if (!source2Url) return download(source1);
+                    if (config.downloadPage > 0) return download(source2);
+                    download(source1, (source, source1Url) => {
+                        if (!source1Url) return download(source2);
+                        if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
+                            if (
+                                coverData.cover[id][source1].width * coverData.cover[id][source1].height - coverData.cover[id][source2].width * coverData.cover[id][source2].height === 144000
+                                && coverData.cover[id][source1].height === 1200
+                                && coverData.cover[id][source2].height === 1200
+                                && coverData.cover[id][source1].width <= 964
+                                && coverData.cover[id][source2].width <= 844
+                            ) download(source2);
+                            else setCover(source1, coverData.cover[id][source1].urlStatus);
+                        } else if (
+                            coverData.cover[id][source1].width * coverData.cover[id][source1].height < coverData.cover[id][source2].width * coverData.cover[id][source2].height
+                        ) download(source2);
+                    });
                 });
             } else {
                 download(config.downloadSource);
