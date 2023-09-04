@@ -1,19 +1,19 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.0
+// @version      1.0.1
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
 // @match        https://r18.bookwalker.jp/*
 // @match        https://global.bookwalker.jp/*
 // @icon         https://bookwalker.jp/favicon.ico
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.0/jquery.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/fflate@0.8.0/umd/index.js
 // @require      https://openuserjs.org/src/libs/sizzle/GM_config.min.js
-// @updateURL    https://raw.githubusercontent.com/rRoler/UserScripts/master/Public/tampermonkey/bookwalker.js
-// @downloadURL  https://raw.githubusercontent.com/rRoler/UserScripts/master/Public/tampermonkey/bookwalker.js
+// @updateURL    https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
+// @downloadURL  https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
 // @supportURL   https://github.com/rRoler/UserScripts/issues
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
@@ -847,6 +847,7 @@
                 });
             }
             function setCover(source, url) {
+                coverData.cover[id].blob.source = source;
                 if (!url) {
                     if (coverData.cover[id].selectable) {
                         --coverData.selectable;
@@ -1184,21 +1185,32 @@
         }
         async function copyCoverLinks() {
             let links = '';
-            coverData.selected.each((i, element) => {
+            for (const element of coverData.selected) {
                 const id = $(element).attr('id');
                 links += getFileName({
                     id: id,
                     string: config.clipboardMask,
-                    filterName: false
+                    filterName: false,
+                    coverUrl: coverData.cover[id].blob.source === coverData.source[2] ? await blobToDataURL(coverData.cover[id].blob.blob) : coverData.cover[id].blob.coverUrl
                 });
-            });
+            }
             await GM_setClipboard(links);
+        }
+        function blobToDataURL(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = _e => resolve(reader.result);
+                reader.onerror = _e => reject(reader.error);
+                reader.onabort = _e => reject(new Error("Read aborted"));
+                reader.readAsDataURL(blob);
+            });
         }
         function getFileName({
          id,
          string = config.imageFileNameMask,
          extension = coverData.extension,
-         filterName = true
+         filterName = true,
+         coverUrl = undefined
         }) {
             const masks = {
                 seriesTitle: titleSection,
@@ -1215,7 +1227,7 @@
                 masks.number = coverData.cover[id].number;
                 masks.fileName = coverData.cover[id].blob.fileName;
                 masks.fileNameId = coverData.cover[id].blob.fileNameId;
-                masks.coverURL = coverData.cover[id].blob.coverUrl;
+                masks.coverURL = coverUrl || coverData.cover[id].blob.coverUrl;
                 masks.newLine = '\n';
             }
 
