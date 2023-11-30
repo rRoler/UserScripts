@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.0.1
+// @version      1.0.2
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -11,7 +11,7 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/fflate@0.8.0/umd/index.js
-// @require      https://openuserjs.org/src/libs/sizzle/GM_config.min.js
+// @require      https://github.com/sizzlemctwizzle/GM_config/raw/06f2015c04db3aaab9717298394ca4f025802873/gm_config.js
 // @updateURL    https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
 // @downloadURL  https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
 // @supportURL   https://github.com/rRoler/UserScripts/issues
@@ -288,19 +288,11 @@
             class: 'a-basic-btn--secondary'
         },
         css: `
-           button.bookwalker-cover-downloader.a-basic-btn--secondary {
-               margin: 2px;
-               display: inline-block;
-               max-width: 256px;
-           }
            a.m-thumb__image.bookwalker-cover-downloader {
                position: static;
            }
            img.bookwalker-cover-downloader.cover-selected {
-               outline: solid #5a8d48 4px;
-           }
-           #bookwalker-cover-downloader-source-select select {
-               background-color: #5a8d48;
+               outline: solid #5a8d48 4px !important;
            }`
     }
     if (/https:\/\/bookwalker.jp\/series\/.*/.test(window.location.href) || /https:\/\/r18.bookwalker.jp\/series\/.*/.test(window.location.href)) {
@@ -322,27 +314,26 @@
             });
             bookwalkerCoverDownloaderPageConfig.titleSection = $('.o-ttsk-card__title').text();
             bookwalkerCoverDownloaderPageConfig.coverSection = wayomiCoverSection;
+            bookwalkerCoverDownloaderPageConfig.buttonData.class = 'a-ttsk-btn--primary';
             bookwalkerCoverDownloaderPageConfig.imageSelector = wayomiCoverSection.find('img.lazy');
             bookwalkerCoverDownloaderPageConfig.css = `
-               button.bookwalker-cover-downloader.a-basic-btn--secondary {
-                   margin: 2px;
-                   display: inline-block;
-                   max-width: 256px;
+               .bookwalker-cover-downloader.a-ttsk-btn--primary {
                    height: fit-content;
                }
                a.bookwalker-cover-downloader {
                    position: sticky;
                    margin: 8px;
                }
+               .bookwalker-cover-downloader.a-ttsk-btn--primary > a.bookwalker-cover-downloader {
+                   position: relative;
+                   margin: unset;
+               }
                img.bookwalker-cover-downloader {
                    max-width: 252px;
                    max-height: 246px;
                }
                img.bookwalker-cover-downloader.cover-selected {
-                   outline: solid #5a8d48 4px;
-               }
-               #bookwalker-cover-downloader-source-select select {
-                   background-color: #5a8d48;
+                   outline: solid #00a4e5 4px !important;
                }
             `;
             return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
@@ -376,21 +367,12 @@
         titleSection: undefined,
         coverSection: undefined,
         buttonData: {
-            tag: 'p',
-            class: 'btn-cart-add btn-box m-b40'
+            tag: 'button',
+            class: 'a-add-all-to-cart-btn'
         },
         css: `
-        p.bookwalker-cover-downloader.btn-cart-add.btn-box.m-b40 {
-            margin: 2px;
-            cursor: pointer; 
-            display: inline-block;
-            max-width: 256px;
-        }
         img.bookwalker-cover-downloader.cover-selected {
-            outline: solid #ff8114 4px;
-        }
-        #bookwalker-cover-downloader-source-select select {
-            background-color: #ff8114;
+            outline: solid #ff8114 4px !important;
         }`
     }
     if (config.bwGlEnableSeriesPages && /https:\/\/global.bookwalker.jp\/series\/.*/.test(window.location.href)) {
@@ -486,8 +468,8 @@
         coverSection.before(`
             <div id="bookwalker-cover-downloader-main-div" class="bookwalker-cover-downloader">
                 <div id="bookwalker-cover-downloader-source-select" class="bookwalker-cover-downloader">
-                    <select id="bookwalker-cover-downloader-source-url-select" class="bookwalker-cover-downloader"></select>
-                    <select id="bookwalker-cover-downloader-source-page-select" class="bookwalker-cover-downloader"></select>
+                    <select id="bookwalker-cover-downloader-source-url-select" class="${buttonData.class} bookwalker-cover-downloader"></select>
+                    <select id="bookwalker-cover-downloader-source-page-select" class="${buttonData.class} bookwalker-cover-downloader"></select>
                 </div>
                 <div id="bookwalker-cover-downloader-buttons" class="bookwalker-cover-downloader"></div>
                 <div id="bookwalker-cover-downloader-errors" class="bookwalker-cover-downloader hidden"></div>
@@ -937,12 +919,14 @@
             const percentRounded = `${Math.round(percent)}%`;
             if (percent > 0 && percent < 100 && percentRounded !== element.children('.progress-percent').text() || percent === 0) {
                 element.parent('a').children('.button-text').addClass('hidden');
+                element.parents(`.${buttonData.class}`).css('height', 'fit-content');
                 element.removeClass('hidden');
                 element.children('.progress-status').text(status);
                 element.children('.progress-bar').val(percent);
                 element.children('.progress-percent').text(percentRounded);
             } else if (percent >= 100) {
                 element.parent('a').children('.button-text').removeClass('hidden');
+                element.parents(`.${buttonData.class}`).css('height', '');
                 element.addClass('hidden');
             }
         }
@@ -1384,6 +1368,7 @@
             .bookwalker-cover-downloader#bookwalker-cover-downloader-main-div {
                 width: 100%;
                 text-align: center;
+                margin-bottom: 18px;
             }
             .bookwalker-cover-downloader#bookwalker-cover-downloader-errors {
                 color: red;
@@ -1403,8 +1388,13 @@
                 opacity: 1;
             }
             a.bookwalker-cover-downloader {
+                color: #fff;
                 text-decoration: none;
                 cursor: pointer;
+            }
+            a.bookwalker-cover-downloader:hover {
+                color: inherit;
+                opacity: 1;
             }
             .bookwalker-cover-downloader.cover-data {
                 color: white;
@@ -1446,11 +1436,22 @@
                 left: 0;
             }
             #bookwalker-cover-downloader-source-select select {
-                color: #fff;
+                width: fit-content;
+                padding-left: 12px;
+                padding-right: 12px;
+                text-align: left;
+                border: none;
+            }
+            #bookwalker-cover-downloader-buttons, #bookwalker-cover-downloader-source-select {
+                display: flex;
+                justify-content: center;
+                align-items: end;
+            }
+            .bookwalker-cover-downloader.${buttonData.class} {
+                margin: 2px;
+                max-width: 256px;
+                appearance: auto;
                 cursor: pointer;
-                padding: 13px 12px;
-                border: unset;
-                border-radius: 4px;
             }
         `);
     }
