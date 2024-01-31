@@ -23,6 +23,7 @@
 // @grant        GM_registerMenuCommand
 // @grant        GM_setClipboard
 // @connect      bookwalker.jp
+// @connect      c.roler.dev
 // @run-at       document-end
 // ==/UserScript==
 
@@ -104,7 +105,7 @@
                 'section': ['Download Settings', ''],
                 'type': 'select',
                 'title': 'The source to download the covers from.\n "Automatic" compares both sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" is much slower and won\'t work with a paid or free book unless it has a preview.',
-                'options': ['Automatic', 'c.bookwalker.jp', 'viewer-epubs-trial.bookwalker.jp'],
+                'options': ['Automatic', 'c.bookwalker.jp', 'viewer-epubs-trial.bookwalker.jp', 'c.roler.dev'],
                 'default': 'Automatic'
             },
             'downloadPage': {
@@ -517,6 +518,7 @@
                 blob: {},
                 [coverData.source[1]]: {},
                 [coverData.source[2]]: {},
+                [coverData.source[3]]: {},
                 selectable: true,
                 clicked: false,
                 fixStatus: buttonData.other.fixCover.text[0],
@@ -642,6 +644,25 @@
                 displayProgress(element.parent().children('.download-progress'), 100);
             }
         }
+        function getThumbnailId(id) {
+            let thumbnailIdMatch = coverData.cover[id].coverThumbnailUrl.match(/rimg.bookwalker.jp\/(\d+)\/\w+\.jpg/);
+            if (thumbnailIdMatch && thumbnailIdMatch[1])
+                return parseInt(thumbnailIdMatch[1].split('').reverse().join(''));
+
+            thumbnailIdMatch = coverData.cover[id].coverThumbnailUrl.match(/c.bookwalker.jp\/thumbnailImage_(\d+)\.jpg/);
+            if (thumbnailIdMatch && thumbnailIdMatch[1])
+                return parseInt(thumbnailIdMatch[1]);
+        }
+        function getBookId(element) {
+            if (singleCover)
+                return window.location.href.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)[0];
+
+            const idAttr = $(element).parent().attr('data-uuid');
+            if (idAttr)
+                return idAttr;
+
+            return $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, '');
+        }
         function getCoverUrl(i, element) {
             const id = $(element).attr('id');
             const getUrl = {
@@ -649,12 +670,15 @@
             }
 
             getUrl[coverData.source[1]] = () => {
-                const url = /thumbnailImage/.test(coverData.cover[id].coverThumbnailUrl) ? `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[id].coverThumbnailUrl.split('/')[3].replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`:`https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[id].coverThumbnailUrl.split('/')[3].split('').reverse().join('')) - 1)}.${coverData.extension}`;
+                const thumbnailId = getThumbnailId(id);
 
-                coverData.cover[id][coverData.source[1]].url = url;
+                if (thumbnailId)
+                    coverData.cover[id][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${thumbnailId - 1}.${coverData.extension}`;
+                else
+                    coverData.cover[id][coverData.source[1]].urlStatus = false;
             }
             getUrl[coverData.source[2]] = () => {
-                const uuid = singleCover ? window.location.href.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi)[0]:!$(element).parent().attr('data-uuid') ? $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, ''):$(element).parent().attr('data-uuid');
+                const uuid = getBookId(element);
 
                 getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${uuid}&BID=0`, getAuthInfo, coverData.source[2]);
 
@@ -721,6 +745,11 @@
                     }
                 }
             }
+            getUrl[coverData.source[3]] = () => {
+                const bookId = getBookId(element);
+
+                coverData.cover[id][coverData.source[3]].url = `https://c.roler.dev/bw/${bookId}`;
+            }
 
             if (config.downloadSource === coverData.source[0]) {
                 $.each(coverData.source, (i, source) => {
@@ -763,19 +792,7 @@
                     ++retry403.count;
                 } else {
                     const response = new Blob([rspObj.response], {type: 'image/jpeg'});
-                    const blobUrl = window.URL.createObjectURL(response);
-                    const image = new Image;
-                    image.src = blobUrl;
-                    image.onload = () => {
-                        const filePath = rspObj.finalUrl.replace(/https:\/\//, '');
-
-                        coverData.cover[id][coverData.source[1]].blob = response;
-                        coverData.cover[id][coverData.source[1]].filePath = filePath;
-                        coverData.cover[id][coverData.source[1]].url = rspObj.finalUrl;
-                        coverData.cover[id][coverData.source[1]].width = image.width;
-                        coverData.cover[id][coverData.source[1]].height = image.height;
-                        coverData.cover[id][coverData.source[1]].blobUrl = blobUrl;
-                    };
+                    setImageInfo(coverData.source[1], response, rspObj.finalUrl);
                 }
             }
             getCover[coverData.source[2]] = (rspObj) => {
@@ -787,32 +804,40 @@
                     coverData.cover[id][coverData.source[2]].blobUrl = window.URL.createObjectURL(rspObj.response);
                 }
             }
+            getCover[coverData.source[3]] = (rspObj) => {
+                if (rspObj.status !== 200)
+                    coverData.cover[id][coverData.source[3]].urlStatus = false;
+                else
+                    setImageInfo(coverData.source[3], rspObj.response, rspObj.finalUrl);
+            }
 
             if (config.downloadSource === coverData.source[0]) {
                 const source1 = coverData.source[1];
                 const source2 = coverData.source[2];
+                const source3 = coverData.source[3];
 
                 promiseUrl(source2, 'url').then((source2Url) => {
-                    if (!source2Url) return download(source1);
+                    if (!source2Url)
+                        return download(source1, (source, source1Url) => {
+                            if (!source1Url) return download(source3);
+                            setCover(source1, coverData.cover[id][source1].urlStatus);
+                        });
                     if (config.downloadPage > 0) return download(source2, (source, source2Url) => {
-                        if (!source2Url) return download(source1);
+                        if (!source2Url)
+                            return download(source1, (source, source1Url) => {
+                                if (!source1Url) return download(source3);
+                                setCover(source1, coverData.cover[id][source1].urlStatus);
+                            });
                         setCover(source2, coverData.cover[id][source2].urlStatus);
                     });
 
                     download(source1, (source, source1Url) => {
-                        if (!source1Url) return download(source2);
-                        if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
-                            if (
-                                coverData.cover[id][source1].width * coverData.cover[id][source1].height - coverData.cover[id][source2].width * coverData.cover[id][source2].height === 144000
-                                && coverData.cover[id][source1].height === 1200
-                                && coverData.cover[id][source2].height === 1200
-                                && coverData.cover[id][source1].width <= 964
-                                && coverData.cover[id][source2].width <= 844
-                            ) download(source2);
-                            else setCover(source1, coverData.cover[id][source1].urlStatus);
-                        } else if (
-                            coverData.cover[id][source1].width * coverData.cover[id][source1].height < coverData.cover[id][source2].width * coverData.cover[id][source2].height
-                        ) download(source2);
+                        if (!source1Url)
+                            return download(source3, (source, source3Url) => {
+                                if (!source3Url) return download(source2);
+                                compareImages(source3, source2);
+                            });
+                        compareImages(source1, source2);
                     });
                 });
             } else {
@@ -828,6 +853,33 @@
                         promiseUrl(source, 'blobUrl').then((url) => fn(source, url));
                     }
                 });
+            }
+            function compareImages(source1, source2) {
+                if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
+                    if (
+                        coverData.cover[id][source1].width * coverData.cover[id][source1].height - coverData.cover[id][source2].width * coverData.cover[id][source2].height === 144000
+                        && coverData.cover[id][source1].height === 1200
+                        && coverData.cover[id][source2].height === 1200
+                        && coverData.cover[id][source1].width <= 964
+                        && coverData.cover[id][source2].width <= 844
+                    ) download(source2);
+                    else setCover(source1, coverData.cover[id][source1].urlStatus);
+                } else download(source2);
+            }
+            function setImageInfo(source, response, url) {
+                const blobUrl = window.URL.createObjectURL(response);
+                const image = new Image;
+                image.src = blobUrl;
+                image.onload = () => {
+                    const filePath = url.replace(/https:\/\//, '');
+
+                    coverData.cover[id][source].blob = response;
+                    coverData.cover[id][source].filePath = filePath;
+                    coverData.cover[id][source].url = url;
+                    coverData.cover[id][source].width = image.width;
+                    coverData.cover[id][source].height = image.height;
+                    coverData.cover[id][source].blobUrl = blobUrl;
+                };
             }
             function setCover(source, url) {
                 coverData.cover[id].blob.source = source;
@@ -851,7 +903,7 @@
                     coverData.cover[id].blob.blob = coverData.cover[id][source].blob;
                     coverData.cover[id].blob.url = coverData.cover[id][source].blobUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id][source].url;
-                    coverData.cover[id].blob.filePath = coverData.cover[id][source].filePath.replace(/\.[^.]*$/, '');
+                    coverData.cover[id].blob.filePath = coverData.cover[id][source].filePath.replace(/\.jpe?g$/, '');
                     coverData.cover[id].blob.fileName = coverData.cover[id].blob.filePath.split('/').pop();
                     coverData.cover[id].blob.fileNameId = coverData.cover[id].blob.fileName.replace('coverImage_', '');
                     coverData.cover[id].blob.width = coverData.cover[id][source].width;
