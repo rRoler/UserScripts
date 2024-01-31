@@ -762,13 +762,14 @@
                     getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`, getCover[coverData.source[1]], coverData.source[1]);
                     ++retry403.count;
                 } else {
-                    const blobUrl = window.URL.createObjectURL(rspObj.response);
+                    const response = new Blob([rspObj.response], {type: 'image/jpeg'});
+                    const blobUrl = window.URL.createObjectURL(response);
                     const image = new Image;
                     image.src = blobUrl;
                     image.onload = () => {
                         const filePath = rspObj.finalUrl.replace(/https:\/\//, '');
 
-                        coverData.cover[id][coverData.source[1]].blob = rspObj.response;
+                        coverData.cover[id][coverData.source[1]].blob = response;
                         coverData.cover[id][coverData.source[1]].filePath = filePath;
                         coverData.cover[id][coverData.source[1]].url = rspObj.finalUrl;
                         coverData.cover[id][coverData.source[1]].width = image.width;
