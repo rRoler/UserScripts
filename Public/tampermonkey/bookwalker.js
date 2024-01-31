@@ -1291,9 +1291,14 @@
                 let volumeString = masks.volumeTitle;
                 const japaneseCharacters = '０１２３４５６７８９'.split('');
                 $.each(japaneseCharacters, (i, character) => volumeString = volumeString.replaceAll(character, i));
-                let volumeNumber = volumeString.match(/\d+/g);
-                volumeNumber = volumeNumber ? volumeNumber.pop() : undefined;
-                return volumeNumber;
+
+                const spaceMatch = volumeString.match(/\((\d+)\)| (\d+) /)
+                if (spaceMatch && spaceMatch[0])
+                    volumeString = spaceMatch[0];
+
+                let volumeNumbers = volumeString.match(/\d+/g);
+                if (volumeNumbers)
+                    return volumeNumbers.pop()
             }
 
             function parseVolume() {
