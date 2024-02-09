@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.0.3
+// @version      1.0.4
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -816,20 +816,10 @@
                 const source2 = coverData.source[2];
                 const source3 = coverData.source[3];
 
+                if (config.downloadPage > 0) return download(source2);
+
                 promiseUrl(source2, 'url').then((source2Url) => {
-                    if (!source2Url)
-                        return download(source1, (source, source1Url) => {
-                            if (!source1Url) return download(source3);
-                            setCover(source1, coverData.cover[id][source1].urlStatus);
-                        });
-                    if (config.downloadPage > 0) return download(source2, (source, source2Url) => {
-                        if (!source2Url)
-                            return download(source1, (source, source1Url) => {
-                                if (!source1Url) return download(source3);
-                                setCover(source1, coverData.cover[id][source1].urlStatus);
-                            });
-                        setCover(source2, coverData.cover[id][source2].urlStatus);
-                    });
+                    if (!source2Url) return download(source1);
 
                     download(source1, (source, source1Url) => {
                         if (!source1Url)
@@ -903,7 +893,7 @@
                     coverData.cover[id].blob.blob = coverData.cover[id][source].blob;
                     coverData.cover[id].blob.url = coverData.cover[id][source].blobUrl;
                     coverData.cover[id].blob.coverUrl = coverData.cover[id][source].url;
-                    coverData.cover[id].blob.filePath = coverData.cover[id][source].filePath.replace(/\.jpe?g$/, '');
+                    coverData.cover[id].blob.filePath = coverData.cover[id][source].filePath.replace(/\.\w+$/, '');
                     coverData.cover[id].blob.fileName = coverData.cover[id].blob.filePath.split('/').pop();
                     coverData.cover[id].blob.fileNameId = coverData.cover[id].blob.fileName.replace('coverImage_', '');
                     coverData.cover[id].blob.width = coverData.cover[id][source].width;
@@ -1325,10 +1315,11 @@
         function setSource(button) {
             if (busyDownloading) return false;
             const selectedUrl = $('#bookwalker-cover-downloader-source-url-select').val();
-            const selectedPage = $('#bookwalker-cover-downloader-source-page-select').val();
+            const selectedPage = parseInt($('#bookwalker-cover-downloader-source-page-select').val());
             if (
                 selectedUrl !== config.downloadSource
-                || config.downloadSource !== coverData.source[1] && selectedPage !== config.downloadPage
+                || config.downloadSource === coverData.source[0] && selectedPage !== config.downloadPage
+                || config.downloadSource === coverData.source[2] && selectedPage !== config.downloadPage
             ) {
                 promiseUrls().then(() => {
                     busyDownloading = false;
@@ -1466,6 +1457,7 @@
             }
             .bookwalker-cover-downloader.cover-data p {
                 margin: 0.16rem;
+                padding: 0 0.16rem;
             }
             .bookwalker-cover-downloader.cover-data a {
                 color: white;
