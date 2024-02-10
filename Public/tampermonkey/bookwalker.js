@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.0.4
+// @version      1.0.5
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -930,7 +930,7 @@
         }
         function displayCover(element, id, revert = false) {
             let url = coverData.cover[id].blob.url;
-            let hideClass = 'removeClass'
+            let hideClass = 'removeClass';
             if (revert) {
                 url = coverData.cover[id].coverThumbnailUrl;
                 hideClass = 'addClass';
@@ -940,16 +940,22 @@
             if (config.replaceCover) {
                 element.attr(dataAttribute, url).attr('src', url).attr('srcset', url);
             }
-            if (config.showTryToFix && config.downloadSource === coverData.source[0] || config.showTryToFix && config.downloadSource === coverData.source[1] || revert) {
-                const fixElement = element.parent().children('.cover-fix');
+            if (
+                config.showTryToFix && config.downloadSource === coverData.source[0] && config.downloadPage <= 0
+                || config.showTryToFix && config.downloadSource === coverData.source[1]
+                || revert
+            ) {
+                if (coverData.cover[id][coverData.source[1]].urlStatus) {
+                    const fixElement = element.parent().children('.cover-fix');
 
-                fixElement[hideClass]('hidden');
-                if (coverData.cover[id].fixStatus === buttonData.other.fixCover.text[2]) {
-                    coverData.cover[id].fixStatus = buttonData.other.fixCover.text[1];
-                } else if (coverData.cover[id].fixStatus === buttonData.other.fixCover.text[3]) {
-                    coverData.cover[id].fixStatus = buttonData.other.fixCover.text[0];
+                    fixElement[hideClass]('hidden');
+                    if (coverData.cover[id].fixStatus === buttonData.other.fixCover.text[2]) {
+                        coverData.cover[id].fixStatus = buttonData.other.fixCover.text[1];
+                    } else if (coverData.cover[id].fixStatus === buttonData.other.fixCover.text[3]) {
+                        coverData.cover[id].fixStatus = buttonData.other.fixCover.text[0];
+                    }
+                    fixElement.children('p').text(coverData.cover[id].fixStatus);
                 }
-                fixElement.children('p').text(coverData.cover[id].fixStatus);
             }
             if (config.showCoverSize) {
                 element.parent().children('.cover-size')[hideClass]('hidden').html(`<p>${coverData.cover[id].blob.width}x${coverData.cover[id].blob.height}</p>`);
