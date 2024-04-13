@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.0.7
+// @version      1.0.8
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -10,7 +10,7 @@
 // @icon         https://bookwalker.jp/favicon.ico
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
-// @require      https://cdn.jsdelivr.net/npm/fflate@0.8.0/umd/index.js
+// @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js
 // @require      https://github.com/sizzlemctwizzle/GM_config/raw/06f2015c04db3aaab9717298394ca4f025802873/gm_config.js
 // @updateURL    https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
 // @downloadURL  https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
@@ -818,18 +818,20 @@
 
                 if (config.downloadPage > 0) return download(source2);
 
-                promiseUrl(source2, 'url').then((source2Url) => {
-                    if (!source2Url) return download(source1);
-
+                promiseUrl(source2, 'url').then((source2Url) =>
                     download(source1, (source, source1Url) => {
+                        if (!source2Url) {
+                            if (!source1Url) return download(source3);
+                            setCover(source1, coverData.cover[id][source1].urlStatus);
+                        }
                         if (!source1Url)
                             return download(source3, (source, source3Url) => {
                                 if (!source3Url) return download(source2);
                                 compareImages(source3, source2);
                             });
                         compareImages(source1, source2);
-                    });
-                });
+                    })
+                );
             } else {
                 download(config.downloadSource);
             }
