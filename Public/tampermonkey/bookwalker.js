@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.0.8
+// @version      1.0.9
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -666,7 +666,7 @@
         function getCoverUrl(i, element) {
             const id = $(element).attr('id');
             const getUrl = {
-                get: (url, fn, source) => AJAXRequest(url, 'json', fn, $(element), 'Getting cover URL...', source)
+                get: (url, fn, source) => AJAXRequest(url, 'text', fn, $(element), 'Getting cover URL...', source)
             }
 
             getUrl[coverData.source[1]] = () => {
@@ -683,7 +683,7 @@
                 getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${uuid}&BID=0`, getAuthInfo, coverData.source[2]);
 
                 function getAuthInfo(rspObj) {
-                    const rspObjData = rspObj.response;
+                    const rspObjData = JSON.parse(rspObj.response);
 
                     if (rspObj.status !== 200 || rspObjData.status !== '200') {
                         coverData.cover[id][coverData.source[2]].urlStatus = false;
@@ -702,7 +702,7 @@
                         getUrl.get(`${book.url}configuration_pack.json${auth.string}`, getMetadata, coverData.source[2]);
 
                         function getMetadata(rspObj) {
-                            const rspObjData = rspObj.response;
+                            const rspObjData = JSON.parse(rspObj.response);
 
                             if (rspObj.status !== 200) {
                                 coverData.cover[id][coverData.source[2]].urlStatus = false;
