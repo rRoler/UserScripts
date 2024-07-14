@@ -8,10 +8,10 @@
 // @match        https://r18.bookwalker.jp/*
 // @match        https://global.bookwalker.jp/*
 // @icon         https://bookwalker.jp/favicon.ico
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
-// @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js
-// @require      https://github.com/sizzlemctwizzle/GM_config/raw/06f2015c04db3aaab9717298394ca4f025802873/gm_config.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js#sha256-fc9a93dd241f6b045cbff0481cf4e1901becd0e12fb45166a8f17f95823f0b1a
+// @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js#sha256-c68874cbaa2fd1650b7d770b328680ea765fb3376023cc3608427fde4f0d0481
+// @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js#sha256-c3b34f2e9f5e74d4d7d64e01cac7a0c01954c6c406414d42185c7b53d6875ddf
+// @require      https://github.com/sizzlemctwizzle/GM_config/raw/06f2015c04db3aaab9717298394ca4f025802873/gm_config.js#sha256-c8f95a548ad83bcc8d82d5c17b1cc76f953ef831a00ff94514ed5b7b76f75d91
 // @updateURL    https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
 // @downloadURL  https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
 // @supportURL   https://github.com/rRoler/UserScripts/issues
@@ -104,7 +104,7 @@
                 'label': 'Download source:',
                 'section': ['Download Settings', ''],
                 'type': 'select',
-                'title': 'The source to download the covers from.\n "Automatic" compares both sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" is much slower and won\'t work with a paid or free book unless it has a preview.',
+                'title': 'The source to download the covers from.\n "Automatic" compares all sources and downloads from the higher quality one.\n "c.bookwalker.jp" won\'t work on newer books.\n "viewer-epubs-trial.bookwalker.jp" won\'t work with a paid or free book unless it has a preview.',
                 'options': ['Automatic', 'c.bookwalker.jp', 'viewer-epubs-trial.bookwalker.jp', 'c.roler.dev'],
                 'default': 'Automatic'
             },
@@ -115,6 +115,12 @@
                 'min': 0,
                 'max': 256,
                 'default': 0
+            },
+            'autoCrop': {
+                'label': 'Auto-crop',
+                'type': 'checkbox',
+                'title': 'Automatically crop out publisher/magazine names on the side.',
+                'default': true
             },
             'downloadOnLoad': {
                 'label': 'Automatic download',
@@ -748,7 +754,7 @@
             getUrl[coverData.source[3]] = () => {
                 const bookId = getBookId(element);
 
-                coverData.cover[id][coverData.source[3]].url = `https://c.roler.dev/bw/${bookId}`;
+                coverData.cover[id][coverData.source[3]].url = `https://c.roler.dev/bw/${bookId}${config.autoCrop ? '' : '?crop=false'}`;
             }
 
             if (config.downloadSource === coverData.source[0]) {
@@ -849,6 +855,7 @@
             function compareImages(source1, source2) {
                 if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
                     if (
+                        config.autoCrop &&
                         coverData.cover[id][source1].width * coverData.cover[id][source1].height - coverData.cover[id][source2].width * coverData.cover[id][source2].height === 144000
                         && coverData.cover[id][source1].height === 1200
                         && coverData.cover[id][source2].height === 1200
