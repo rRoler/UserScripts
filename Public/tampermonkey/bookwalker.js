@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.2.1
+// @version      1.2.2
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -104,7 +104,7 @@
                 'label': 'Download source:',
                 'section': ['Download Settings', ''],
                 'type': 'select',
-                'title': 'The source to download the covers from.\n "Automatic" compares all sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" won\'t work with a paid or free book unless it has a preview.\n "c.bookwalker.jp (legacy)" won\'t work on newer books.',
+                'title': 'The source to download the covers from.\n "Automatic" compares all sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" won\'t work with a paid or free book unless it has a preview.\n "c.bookwalker.jp" works only on BookWalker Japan series list, series and volume/book pages.\n "c.bookwalker.jp (legacy)" won\'t work on newer books.',
                 'options': ['Automatic', 'c.roler.dev', 'viewer-epubs-trial.bookwalker.jp', 'c.bookwalker.jp', 'c.bookwalker.jp (legacy)'],
                 'default': 'Automatic'
             },
@@ -625,6 +625,10 @@
                     method: 'GET',
                     url: url,
                     responseType: type,
+                    headers: {
+                        Origin: window.location.origin,
+                        Referer: window.location.href
+                    },
                     onprogress: onProgress,
                     onload: onLoad,
                     onabort: reportError,
@@ -1024,7 +1028,7 @@
                 element.parent().children('.cover-size')[hideClass]('hidden').html(`<p>${coverData.cover[id].blob.width}x${coverData.cover[id].blob.height}</p>`);
             }
             if (config.showCoverURL) {
-                element.parent().children('.cover-link')[hideClass]('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}" target="_blank" rel="noopener noreferrer">${coverData.cover[id].blob.fileNameId}</a>`);
+                element.parent().children('.cover-link')[hideClass]('hidden').html(`<a href="${coverData.cover[id].blob.coverUrl}" target="_blank" rel="noopener">${coverData.cover[id].blob.fileNameId}</a>`);
             }
         }
         function displayProgress(element, percent, status) {
@@ -1191,6 +1195,10 @@
                                     filterName: false
                                 }) + saveFileName,
                                 saveAs: false,
+                                headers: {
+                                    Origin: window.location.origin,
+                                    Referer: window.location.href
+                                },
                                 onload: onLoad,
                                 onabort: handleError,
                                 onerror: handleError,
