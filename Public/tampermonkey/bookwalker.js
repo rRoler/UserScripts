@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.2.2
+// @version      1.2.3
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -107,6 +107,13 @@
                 'title': 'The source to download the covers from.\n "Automatic" compares all sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" won\'t work with a paid or free book unless it has a preview.\n "c.bookwalker.jp" works only on BookWalker Japan series list, series and volume/book pages.\n "c.bookwalker.jp (legacy)" won\'t work on newer books.',
                 'options': ['Automatic', 'c.roler.dev', 'viewer-epubs-trial.bookwalker.jp', 'c.bookwalker.jp', 'c.bookwalker.jp (legacy)'],
                 'default': 'Automatic'
+            },
+            'automaticSourcePriority': {
+                'label': 'Automatic source priority:',
+                'type': 'select',
+                'title': 'The source that will be prioritized when the download source is set to "Automatic".',
+                'options': ['c.roler.dev', 'c.bookwalker.jp', 'c.bookwalker.jp (legacy)'],
+                'default': 'c.roler.dev'
             },
             'downloadPage': {
                 'label': 'Download preview page:',
@@ -869,10 +876,23 @@
             }
 
             if (config.downloadSource === coverData.source[0]) {
-                const source1 = coverData.source[1];
-                const source2 = coverData.source[2];
-                const source3 = coverData.source[3];
-                const source4 = coverData.source[4];
+                let source1 = coverData.source[1];
+                let source2 = coverData.source[2];
+                let source3 = coverData.source[3];
+                let source4 = coverData.source[4];
+
+                switch (config.automaticSourcePriority) {
+                    case coverData.source[3]:
+                        source1 = coverData.source[3];
+                        source3 = coverData.source[4];
+                        source4 = coverData.source[1];
+                        break;
+                    case coverData.source[4]:
+                        source1 = coverData.source[4];
+                        source3 = coverData.source[1];
+                        source4 = coverData.source[3];
+                        break;
+                }
 
                 if (config.downloadPage > 0) return download(source2);
 
