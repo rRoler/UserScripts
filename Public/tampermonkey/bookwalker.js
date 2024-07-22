@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.2.0
+// @version      1.2.1
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -847,8 +847,10 @@
             getCover[coverData.source[3]] = (rspObj) => {
                 if (rspObj.status !== 200)
                     coverData.cover[id][coverData.source[3]].urlStatus = false;
-                else
-                    setImageInfo(coverData.source[3], rspObj.response, rspObj.finalUrl);
+                else {
+                    const response = new Blob([rspObj.response], {type: 'image/jpeg'});
+                    setImageInfo(coverData.source[3], response, rspObj.finalUrl);
+                }
             }
             getCover[coverData.source[4]] = (rspObj) => {
                 if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/i)) {
