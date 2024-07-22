@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.1.1
+// @version      1.2.0
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -104,8 +104,8 @@
                 'label': 'Download source:',
                 'section': ['Download Settings', ''],
                 'type': 'select',
-                'title': 'The source to download the covers from.\n "Automatic" compares all sources and downloads from the higher quality one.\n "c.bookwalker.jp" won\'t work on newer books.\n "viewer-epubs-trial.bookwalker.jp" won\'t work with a paid or free book unless it has a preview.',
-                'options': ['Automatic', 'c.bookwalker.jp', 'viewer-epubs-trial.bookwalker.jp', 'c.roler.dev'],
+                'title': 'The source to download the covers from.\n "Automatic" compares all sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" won\'t work with a paid or free book unless it has a preview.\n "c.bookwalker.jp (legacy)" won\'t work on newer books.',
+                'options': ['Automatic', 'c.roler.dev', 'viewer-epubs-trial.bookwalker.jp', 'c.bookwalker.jp', 'c.bookwalker.jp (legacy)'],
                 'default': 'Automatic'
             },
             'downloadPage': {
@@ -119,7 +119,7 @@
             'autoCrop': {
                 'label': 'Auto-crop',
                 'type': 'checkbox',
-                'title': 'Automatically crop out publisher/magazine names on the side.',
+                'title': 'Automatically crop out publisher/magazine names on the side.\n Works only when the download source is set to "Automatic" or "c.roler.dev".',
                 'default': true
             },
             'downloadOnLoad': {
@@ -525,6 +525,7 @@
                 [coverData.source[1]]: {},
                 [coverData.source[2]]: {},
                 [coverData.source[3]]: {},
+                [coverData.source[4]]: {},
                 selectable: true,
                 clicked: false,
                 fixStatus: buttonData.other.fixCover.text[0],
@@ -676,12 +677,9 @@
             }
 
             getUrl[coverData.source[1]] = () => {
-                const thumbnailId = getThumbnailId(id);
+                const bookId = getBookId(element);
 
-                if (thumbnailId)
-                    coverData.cover[id][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${thumbnailId - 1}.${coverData.extension}`;
-                else
-                    coverData.cover[id][coverData.source[1]].urlStatus = false;
+                coverData.cover[id][coverData.source[1]].url = `https://c.roler.dev/bw/${bookId}${config.autoCrop ? '' : '?crop=false'}`;
             }
             getUrl[coverData.source[2]] = () => {
                 const uuid = getBookId(element);
@@ -689,7 +687,13 @@
                 getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${uuid}&BID=0`, getAuthInfo, coverData.source[2]);
 
                 function getAuthInfo(rspObj) {
-                    const rspObjData = JSON.parse(rspObj.response);
+                    let rspObjData;
+                    try {
+                        rspObjData = JSON.parse(rspObj.response);
+                    } catch (e) {
+                        coverData.cover[id][coverData.source[2]].urlStatus = false;
+                        return;
+                    }
 
                     if (rspObj.status !== 200 || rspObjData.status !== '200') {
                         coverData.cover[id][coverData.source[2]].urlStatus = false;
@@ -708,7 +712,13 @@
                         getUrl.get(`${book.url}configuration_pack.json${auth.string}`, getMetadata, coverData.source[2]);
 
                         function getMetadata(rspObj) {
-                            const rspObjData = JSON.parse(rspObj.response);
+                            let rspObjData;
+                            try {
+                                rspObjData = JSON.parse(rspObj.response);
+                            } catch (e) {
+                                coverData.cover[id][coverData.source[2]].urlStatus = false;
+                                return;
+                            }
 
                             if (rspObj.status !== 200) {
                                 coverData.cover[id][coverData.source[2]].urlStatus = false;
@@ -752,9 +762,38 @@
                 }
             }
             getUrl[coverData.source[3]] = () => {
-                const bookId = getBookId(element);
+                const uuid = getBookId(element);
 
-                coverData.cover[id][coverData.source[3]].url = `https://c.roler.dev/bw/${bookId}${config.autoCrop ? '' : '?crop=false'}`;
+                getUrl.get(`https://bookwalker.jp/de${uuid}`, parseBookPage, coverData.source[3]);
+
+                function parseBookPage(rspObj) {
+                    if (rspObj.status !== 200) {
+                        coverData.cover[id][coverData.source[3]].urlStatus = false;
+                        return;
+                    }
+
+                    const bookPage = $('<div>').append($.parseHTML(rspObj.response));
+
+                    const twitterImage = bookPage.find('meta[name="twitter:image"]').attr('content');
+                    if (!twitterImage) {
+                        coverData.cover[id][coverData.source[3]].urlStatus = false;
+                        return;
+                    }
+
+                    const coverIdMatch = twitterImage.match(/rimg.bookwalker.jp\/([0-9]+|[0-9a-f]{32})\/.*.png/)
+                    if (coverIdMatch && coverIdMatch[1])
+                        coverData.cover[id][coverData.source[3]].url = `https://c.bookwalker.jp/coverImage_${coverIdMatch[1]}.${coverData.extension}`;
+                    else
+                        coverData.cover[id][coverData.source[3]].urlStatus = false;
+                }
+            }
+            getUrl[coverData.source[4]] = () => {
+                const thumbnailId = getThumbnailId(id);
+
+                if (thumbnailId)
+                    coverData.cover[id][coverData.source[4]].url = `https://c.bookwalker.jp/coverImage_${thumbnailId - 1}.${coverData.extension}`;
+                else
+                    coverData.cover[id][coverData.source[4]].urlStatus = false;
             }
 
             if (config.downloadSource === coverData.source[0]) {
@@ -791,15 +830,10 @@
             coverData.cover[id].clicked = true;
 
             getCover[coverData.source[1]] = (rspObj) => {
-                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/i)) {
+                if (rspObj.status !== 200)
                     coverData.cover[id][coverData.source[1]].urlStatus = false;
-                } else if (rspObj.status === 403 && retry403.count < retry403.max) {
-                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`, getCover[coverData.source[1]], coverData.source[1]);
-                    ++retry403.count;
-                } else {
-                    const response = new Blob([rspObj.response], {type: 'image/jpeg'});
-                    setImageInfo(coverData.source[1], response, rspObj.finalUrl);
-                }
+                else
+                    setImageInfo(coverData.source[1], rspObj.response, rspObj.finalUrl);
             }
             getCover[coverData.source[2]] = (rspObj) => {
                 if (rspObj.status !== 200) {
@@ -816,23 +850,41 @@
                 else
                     setImageInfo(coverData.source[3], rspObj.response, rspObj.finalUrl);
             }
+            getCover[coverData.source[4]] = (rspObj) => {
+                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/i)) {
+                    coverData.cover[id][coverData.source[4]].urlStatus = false;
+                } else if (rspObj.status === 403 && retry403.count < retry403.max) {
+                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`, getCover[coverData.source[4]], coverData.source[4]);
+                    ++retry403.count;
+                } else {
+                    const response = new Blob([rspObj.response], {type: 'image/jpeg'});
+                    setImageInfo(coverData.source[4], response, rspObj.finalUrl);
+                }
+            }
 
             if (config.downloadSource === coverData.source[0]) {
                 const source1 = coverData.source[1];
                 const source2 = coverData.source[2];
                 const source3 = coverData.source[3];
+                const source4 = coverData.source[4];
 
                 if (config.downloadPage > 0) return download(source2);
 
                 promiseUrl(source2, 'url').then((source2Url) =>
                     download(source1, (source, source1Url) => {
                         if (!source2Url) {
-                            if (!source1Url) return download(source3);
+                            if (!source1Url) return download(source3, (source, source3Url) => {
+                                if (!source3Url) return download(source4);
+                                setCover(source3, coverData.cover[id][source3].urlStatus);
+                            });
                             return setCover(source1, coverData.cover[id][source1].urlStatus);
                         }
                         if (!source1Url)
                             return download(source3, (source, source3Url) => {
-                                if (!source3Url) return download(source2);
+                                if (!source3Url) return download(source4, (source, source4Url) => {
+                                    if (!source4Url) return download(source2);
+                                    compareImages(source4, source2);
+                                });
                                 compareImages(source3, source2);
                             });
                         compareImages(source1, source2);
@@ -951,10 +1003,10 @@
             }
             if (
                 config.showTryToFix && config.downloadSource === coverData.source[0] && config.downloadPage <= 0
-                || config.showTryToFix && config.downloadSource === coverData.source[1]
+                || config.showTryToFix && config.downloadSource === coverData.source[4]
                 || revert
             ) {
-                if (coverData.cover[id][coverData.source[1]].url || revert) {
+                if (coverData.cover[id][coverData.source[4]].url || revert) {
                     const fixElement = element.parent().children('.cover-fix');
 
                     fixElement[hideClass]('hidden');
@@ -1001,7 +1053,7 @@
             }
 
             function fix(revert) {
-                coverData.cover[imgElementId][coverData.source[1]].urlStatus = true;
+                coverData.cover[imgElementId][coverData.source[4]].urlStatus = true;
                 if (!coverData.cover[imgElementId].selectable) {
                     coverData.cover[imgElementId].selectable = true;
                     ++coverData.selectable;
@@ -1009,15 +1061,15 @@
                 URL.revokeObjectURL(coverData.cover[imgElementId].blob.url);
                 delete coverData.cover[imgElementId].blob.url;
                 delete coverData.cover[imgElementId].blob.blob;
-                delete coverData.cover[imgElementId][coverData.source[1]].blobUrl;
-                delete coverData.cover[imgElementId][coverData.source[1]].blob;
+                delete coverData.cover[imgElementId][coverData.source[4]].blobUrl;
+                delete coverData.cover[imgElementId][coverData.source[4]].blob;
 
                 if (revert) {
-                    coverData.cover[imgElementId][coverData.source[1]].url = coverData.cover[imgElementId][coverData.source[1]].oldUrl;
+                    coverData.cover[imgElementId][coverData.source[4]].url = coverData.cover[imgElementId][coverData.source[4]].oldUrl;
                     coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[3];
                 } else {
-                    coverData.cover[imgElementId][coverData.source[1]].oldUrl = coverData.cover[imgElementId][coverData.source[1]].url;
-                    coverData.cover[imgElementId][coverData.source[1]].url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[imgElementId][coverData.source[1]].url.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`;
+                    coverData.cover[imgElementId][coverData.source[4]].oldUrl = coverData.cover[imgElementId][coverData.source[4]].url;
+                    coverData.cover[imgElementId][coverData.source[4]].url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[imgElementId][coverData.source[4]].url.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`;
                     coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[2];
                 }
                 currentElement.text(coverData.cover[imgElementId].fixStatus);
