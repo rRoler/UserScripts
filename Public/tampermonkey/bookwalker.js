@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.2.3
+// @version      1.2.4
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -309,7 +309,7 @@
                outline: solid #5a8d48 4px !important;
            }`
     }
-    if (/https:\/\/bookwalker.jp\/series\/.*/.test(window.location.href) || /https:\/\/r18.bookwalker.jp\/series\/.*/.test(window.location.href)) {
+    if (/https:\/\/(?:r18.)?bookwalker.jp\/series\/.*/.test(window.location.href)) {
         if (config.bwJpEnableSeriesListPages && /https:\/\/.*\/series\/.*\/list\/.*/.test(window.location.href)) {
             bookwalkerCoverDownloaderPageConfig.titleSection = $('.o-contents-section__title').text();
             bookwalkerCoverDownloaderPageConfig.coverSection = $('.o-contents-section__body').first();
@@ -370,7 +370,7 @@
             return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
         }
     }
-    if (config.bwJpEnableVolumePages && /https:\/\/bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
+    if (config.bwJpEnableVolumePages && /https:\/\/(?:r18.)?bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
         bookwalkerCoverDownloaderPageConfig.titleSection = $('.p-main__title').text();
         bookwalkerCoverDownloaderPageConfig.coverSection = $('.p-main').first();
         bookwalkerCoverDownloaderPageConfig.singleCover = true;
