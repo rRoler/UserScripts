@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.2.4
+// @version      1.2.5
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -12,8 +12,8 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js#sha256-c68874cbaa2fd1650b7d770b328680ea765fb3376023cc3608427fde4f0d0481
 // @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js#sha256-c3b34f2e9f5e74d4d7d64e01cac7a0c01954c6c406414d42185c7b53d6875ddf
 // @require      https://github.com/sizzlemctwizzle/GM_config/raw/06f2015c04db3aaab9717298394ca4f025802873/gm_config.js#sha256-c8f95a548ad83bcc8d82d5c17b1cc76f953ef831a00ff94514ed5b7b76f75d91
-// @updateURL    https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
-// @downloadURL  https://github.com/rRoler/UserScripts/raw/master/Public/tampermonkey/bookwalker.js
+// @updateURL    https://github.com/rRoler/UserScripts/raw/master/bookwalker-covers.user.js
+// @downloadURL  https://github.com/rRoler/UserScripts/raw/master/bookwalker-covers.user.js
 // @supportURL   https://github.com/rRoler/UserScripts/issues
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
@@ -29,6 +29,10 @@
 
 (async function() {
     'use strict';
+
+    if (confirm('You are using an outdated version of the BookWalker Cover Downloader userscript! Please install the latest version at "https://github.com/rRoler/UserScripts/raw/master/bookwalker-covers.user.js".')) {
+        window.open('https://github.com/rRoler/UserScripts/raw/master/bookwalker-covers.user.js');
+    }
 
     let config = {};
     const configId = 'bookwalker-cover-downloader-config';
