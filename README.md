@@ -13,4 +13,12 @@
 
 ***
 
+> ## MangaDex Add Info<br>
+> Add some additional local information to MangaDex title pages.<br>
+> !! DATA IS STORED INSIDE USERSCRIPT STORAGE !!
+> <br><br>
+> [![Install UserScript]](https://github.com/rRoler/UserScripts/raw/master/mangadex-add-info.user.js)
+
+***
+
 [Bookmarklets](https://bookmarklets.roler.dev)
