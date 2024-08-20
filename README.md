@@ -11,13 +11,11 @@
 > <br><br>
 > [![Install UserScript]](https://github.com/rRoler/UserScripts/raw/master/bookwalker-covers.user.js)
 
-***
-
-> ## MangaDex Add Info<br>
-> Add some additional local information to MangaDex title pages.<br>
-> !! DATA IS STORED INSIDE USERSCRIPT STORAGE !!
+> ## MangaDex Customizer<br>
+> Customize MangaDex title pages by adding custom alt titles, changing the main title and cover, and adding custom tags\links.<br>
+> All data is stored inside userscript storage.
 > <br><br>
-> [![Install UserScript]](https://github.com/rRoler/UserScripts/raw/master/mangadex-add-info.user.js)
+> [![Install UserScript]](https://github.com/rRoler/UserScripts/raw/master/mangadex-custom.user.js)
 
 ***
 
