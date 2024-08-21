@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MangaDex Customizer
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.0.1
+// @version      1.0.2
 // @description  Customize MangaDex title pages by adding custom alt titles, changing the main title and cover, and adding custom tags\links. All data is stored inside userscript storage.
 // @author       Roler
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=mangadex.org
@@ -67,22 +67,19 @@
     const setStorage = (section, value) => GM_setValue(section.id, value);
 
     const isMd = /^mangadex\.org|canary\.mangadex\.dev$/.test(window.location.hostname);
-    const mdTitleOptions = [
-        {
-            add: mdAddAltTitleOptions,
-            tab: 'chapters',
+    const mdTitleOptions = {
+        altTitle: {
+            add: mdAddAltTitleOptions
         },
-        {
-            add: mdAddCustomSectionOptions,
-            tab: 'chapters',
+        customSection: {
+            add: mdAddCustomSectionOptions
+        },
+        volumeCover: {
+            add: mdAddVolumeCoverOptions,
+            tab: 'art',
+            dynamic: true
         }
-    ];
-    const mdDynamicTitleOptions = [
-        {
-            add: mdAddVolumeOptions,
-            tab: 'art'
-        }
-    ];
+    };
 
     const mdGetTitleStorage = (titleId, section) => {
         const storedData = getStorage(storage.mangadex.titles.data);
@@ -146,9 +143,7 @@
         return seriesIdMatch && seriesIdMatch[1];
     }
 
-    let mdCurrentTitleId;
-    let mdCurrentTitleTab;
-    let mdCurrentTitleTabStorage;
+    let mdTitleOptionsLoaded = false;
     let komgaCurrentSeriesId;
     let scriptErrored = false;
     observeElement(async (mutations, observer) => {
@@ -166,46 +161,37 @@
             if (titleId) {
                 const currentTabMatch = window.location.search.match(/tab=([a-z]+)/);
                 const currentTab = currentTabMatch && currentTabMatch[1] || 'chapters';
-                if (mdCurrentTitleId !== titleId || mdCurrentTitleTab !== currentTab) {
-                    let loadedOptions = 0;
 
-                    for (const option of mdTitleOptions) {
-                        if (!currentTab.includes(option.tab))
-                            option.loaded = true;
+                for (const optionId in mdTitleOptions) {
+                    const option = mdTitleOptions[optionId];
 
-                        try {
-                            if (!option.loaded) option.loaded = option.add(titleId);
-                        } catch (e) {
-                            console.error(e);
-                            scriptErrored = true;
-                            return;
-                        }
-
-                        if (option.loaded) ++loadedOptions;
-                    }
-
-                    if (loadedOptions === mdTitleOptions.length) {
-                        mdCurrentTitleId = titleId;
-                        mdCurrentTitleTab = currentTab;
-                        mdTitleOptions.forEach(option => option.loaded = false);
-                    }
-                }
-
-                for (const option of mdDynamicTitleOptions) {
-                    if (currentTab === option.tab) {
-                        try {
-                            option.add(titleId);
-                        } catch (e) {
-                            console.error(e);
-                            scriptErrored = true;
-                            return;
+                    if (!option.tab || option.tab === currentTab) {
+                        if (option.dynamic || !option.loaded || option.loadedId !== titleId || option.loadedTab !== currentTab) {
+                            try {
+                                option.loaded = option.add(titleId);
+                                if (option.loaded) {
+                                    option.loadedId = titleId;
+                                    option.loadedTab = currentTab;
+                                    mdTitleOptionsLoaded = true;
+                                }
+                            } catch (e) {
+                                console.error(e);
+                                scriptErrored = true;
+                                return;
+                            }
                         }
                     }
                 }
-            } else {
-                mdCurrentTitleId = '';
-                mdCurrentTitleTab = '';
-                mdCurrentTitleTabStorage = undefined;
+            } else if (mdTitleOptionsLoaded) {
+                for (const optionId in mdTitleOptions) {
+                    const option = mdTitleOptions[optionId];
+
+                    option.loaded = false;
+                    option.loadedId = '';
+                    option.loadedTab = '';
+                    if (option.storage) delete option.storage;
+                }
+                mdTitleOptionsLoaded = false;
             }
 
             try {
@@ -410,16 +396,18 @@
             const addNewSectionTextElement = addNewSectionElement.querySelector('div.font-bold');
             addNewSectionTextElement.classList.remove('mb-2');
             addNewSectionTextElement.classList.add('cursor-pointer');
+            addNewSectionTextElement.style.setProperty('width', 'fit-content');
             addNewSectionElement.classList.remove('mb-2');
             addNewSectionElement.classList.add('w-full');
             addNewSectionTextElement.addEventListener('click', () => {
                 const storedSections = getStorage(storage.mangadex.titles.custom_sections);
-                const sectionName = prompt('Enter new section name').trim();
-                if (!sectionName) return;
+                const sectionName = prompt('Enter new section name');
+                const trimmedSectionName = sectionName && sectionName.trim();
+                if (!trimmedSectionName) return;
 
                 const sectionData = {
-                    id: sectionName.replace(/\s/g, '_').toLowerCase(),
-                    name: sectionName
+                    id: trimmedSectionName.replace(/\s/g, '_').toLowerCase(),
+                    name: trimmedSectionName
                 }
 
                 if (storedSections.some(section => section.id === sectionData.id)) return;
@@ -466,7 +454,7 @@
         const altTitlesSectionTextElement = altTitlesSectionElement.querySelector('div.font-bold');
         const altTitlesElements = altTitlesSectionElement.querySelectorAll('.alt-title');
         const altTitleElement = altTitlesElements[0].cloneNode(true);
-        if (!mdCurrentTitleTabStorage) mdCurrentTitleTabStorage = [];
+        if (!mdTitleOptions.altTitle.storage) mdTitleOptions.altTitle.storage = [];
 
         const addAltTitleStar = altTitleElement => {
             const storedTitle = mdGetTitleStorage(titleId, storage.mangadex.titles.data.main_title);
@@ -489,13 +477,13 @@
                 mdReplaceTitles(titleId, setTitleObject.selected);
 
                 setTitleObject.selected = !setTitleObject.selected;
-                mdCurrentTitleTabStorage.forEach(_setTitleObject => {
+                mdTitleOptions.altTitle.storage.forEach(_setTitleObject => {
                     _setTitleObject.selected = _setTitleObject.value === setTitleObject.value && setTitleObject.selected;
                     _setTitleObject.starElement.textContent = _setTitleObject.selected ? '★' : '☆';
                 });
             });
 
-            mdCurrentTitleTabStorage.push(setTitleObject);
+            mdTitleOptions.altTitle.storage.push(setTitleObject);
             altTitleElement.prepend(setTitleObject.starElement);
         };
 
@@ -519,8 +507,8 @@
 
                 mdSetTitleStorage(titleId, storage.mangadex.titles.data.alt_titles, value, true, true);
 
-                const setTitleObjectIndex = mdCurrentTitleTabStorage.findIndex(setTitleObject => setTitleObject.value === value);
-                if (setTitleObjectIndex > -1) mdCurrentTitleTabStorage.splice(setTitleObjectIndex, 1);
+                const setTitleObjectIndex = mdTitleOptions.altTitle.storage.findIndex(setTitleObject => setTitleObject.value === value);
+                if (setTitleObjectIndex > -1) mdTitleOptions.altTitle.storage.splice(setTitleObjectIndex, 1);
 
                 const storedAltTitles = mdGetTitleStorage(titleId, storage.mangadex.titles.data.alt_titles);
                 const storedMainTitle = mdGetTitleStorage(titleId, storage.mangadex.titles.data.main_title);
@@ -540,6 +528,7 @@
 
         altTitlesSectionTextElement.textContent = `${altTitlesSectionTextElement.textContent} +`
         altTitlesSectionTextElement.classList.add('cursor-pointer');
+        altTitlesSectionTextElement.style.setProperty('width', 'fit-content');
         altTitlesSectionTextElement.addEventListener('click', () => {
             const value = prompt('Enter new title');
             if (!value) return;
@@ -552,7 +541,7 @@
         const storedAltTitles = mdGetTitleStorage(titleId, storage.mangadex.titles.data.alt_titles);
         if (storedAltTitles) storedAltTitles.forEach(createAltTitle);
         const storedTitle = mdGetTitleStorage(titleId, storage.mangadex.titles.data.main_title);
-        if (storedTitle && !mdCurrentTitleTabStorage.some(setTitleObject => setTitleObject.selected)) {
+        if (storedTitle && !mdTitleOptions.altTitle.storage.some(setTitleObject => setTitleObject.selected)) {
             mdSetTitleStorage(titleId, storage.mangadex.titles.data.alt_titles, storedTitle, false, true);
             createAltTitle(storedTitle);
         }
@@ -605,12 +594,12 @@
         });
     }
 
-    function mdAddVolumeOptions(titleId) {
+    function mdAddVolumeCoverOptions(titleId) {
         if (document.querySelector('div[role="alert"]')) return true;
         if (document.querySelectorAll(`a[href*="covers/${titleId}"]`).length < 2) return false;
         const volumeCoverLoadedAttribute = `${userScriptId}-volume-cover-loaded`;
         const volumeCoverLinkElements = document.querySelectorAll(`a[href*="covers/${titleId}"]:not([${volumeCoverLoadedAttribute}])`);
-        if (!mdCurrentTitleTabStorage) mdCurrentTitleTabStorage = [];
+        if (!mdTitleOptions.volumeCover.storage) mdTitleOptions.volumeCover.storage = [];
 
         volumeCoverLinkElements.forEach(volumeCoverLinkElement => {
             volumeCoverLinkElement.setAttribute(volumeCoverLoadedAttribute, 'true');
@@ -641,7 +630,7 @@
                 mdSetTitleStorage(titleId, storage.mangadex.titles.data.main_cover, setCoverObject.value, setCoverObject.selected);
 
                 setCoverObject.selected = !setCoverObject.selected;
-                mdCurrentTitleTabStorage.forEach(_setCoverObject => {
+                mdTitleOptions.volumeCover.storage.forEach(_setCoverObject => {
                     _setCoverObject.selected = _setCoverObject.value === setCoverObject.value && setCoverObject.selected;
                     _setCoverObject.starElement.textContent = _setCoverObject.selected ? '★' : '☆';
                 });
@@ -650,7 +639,7 @@
             });
             volumeSubtitleElement.prepend(setCoverObject.starElement);
 
-            mdCurrentTitleTabStorage.push(setCoverObject);
+            mdTitleOptions.volumeCover.storage.push(setCoverObject);
         });
 
         return true;
