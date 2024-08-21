@@ -442,7 +442,7 @@
         const infoElement = mdGetInfoElement(titleId);
         if (!infoElement) return false;
 
-        if (!infoElement.querySelector('a')) return;
+        if (!infoElement.querySelector('a')) return false;
 
         let altTitlesSectionElement = mdGetAltTitlesSectionElement(infoElement);
         if (!altTitlesSectionElement) {
