@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MangaDex Customizer
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.0.0
+// @version      1.0.1
 // @description  Customize MangaDex title pages by adding custom alt titles, changing the main title and cover, and adding custom tags\links. All data is stored inside userscript storage.
 // @author       Roler
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=mangadex.org
@@ -441,6 +441,8 @@
     function mdAddAltTitleOptions(titleId) {
         const infoElement = mdGetInfoElement(titleId);
         if (!infoElement) return false;
+
+        if (!infoElement.querySelector('a')) return;
 
         let altTitlesSectionElement = mdGetAltTitlesSectionElement(infoElement);
         if (!altTitlesSectionElement) {
