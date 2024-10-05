@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.2.6
+// @version      1.2.7
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -104,7 +104,7 @@
                 'label': 'Download source:',
                 'section': ['Download Settings', ''],
                 'type': 'select',
-                'title': 'The source to download the covers from.\n "Automatic" compares all sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" won\'t work with a paid or free book unless it has a preview.\n "c.bookwalker.jp" works only on BookWalker Japan series list, series and volume/book pages.\n "c.bookwalker.jp (legacy)" won\'t work on newer books.',
+                'title': 'The source to download the covers from.\n "Automatic" compares all sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" won\'t work with a paid or free book unless it has a preview.\n "c.bookwalker.jp (legacy)" won\'t work on newer books.',
                 'options': ['Automatic', 'c.roler.dev', 'viewer-epubs-trial.bookwalker.jp', 'c.bookwalker.jp', 'c.bookwalker.jp (legacy)'],
                 'default': 'Automatic'
             },
@@ -435,7 +435,8 @@
             extension: 'jpg',
             selected: [],
             lastSelected: undefined,
-            maxPage: 0
+            maxPage: 0,
+            cachedUrls: {}
         }
         coverData.selectable = coverData.image.length;
         const checkTimeout = 200;
@@ -511,10 +512,14 @@
             <p class="bookwalker-cover-downloader download-progress progress-percent"></p>
         `);
 
-        coverData.image.each(getCoverUrl);
+        busyDownloading = true;
+        cacheCoverUrls().then(() => {
+            busyDownloading = false;
+            coverData.image.each(getCoverUrl);
 
-        if (singleCover) coverData.image.each((i, element) => selectCover($(element)));
-        else if (config.downloadOnLoad) downloadAll();
+            if (singleCover) coverData.image.each((i, element) => selectCover($(element)));
+            else if (config.downloadOnLoad) downloadAll();
+        }).catch(displayError);
 
         function displayError(message) {
             const container = $('#bookwalker-cover-downloader-errors');
@@ -681,6 +686,47 @@
 
             return $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, '');
         }
+        async function cacheCoverUrls() {
+            if (
+                config.downloadSource !== coverData.source[0]
+                && config.downloadSource !== coverData.source[3]
+                || !$.isEmptyObject(coverData.cachedUrls)
+            )
+                return;
+
+            const all_uuids = coverData.image.toArray().map(image => getBookId(image));
+            const rspObj = await new Promise((resolve) =>
+                AJAXRequest(
+                    `https://c.roler.dev/bw/books?ids[]=${all_uuids.join('&ids[]=')}`,
+                    'text',
+                    resolve,
+                    buttonData.button.setSource.element.children('a').children('.download-progress'),
+                    'Caching cover urls...',
+                    coverData.source[3]
+                )
+            );
+
+            if (rspObj.status !== 200)
+                return;
+
+            let rspObjData;
+            try {
+                rspObjData = JSON.parse(rspObj.response);
+            } catch (e) {
+                return;
+            }
+
+            if (!rspObjData.data)
+                return;
+
+            $.each(rspObjData.data, (i, data) => {
+                if (!data.uuid || !data.coverImageUrl) return;
+
+                if ($.isEmptyObject(coverData.cachedUrls[coverData.source[3]]))
+                    coverData.cachedUrls[coverData.source[3]] = {};
+                coverData.cachedUrls[coverData.source[3]][data.uuid] = data.coverImageUrl;
+            });
+        }
         function getCoverUrl(i, element) {
             const id = $(element).attr('id');
             const getUrl = {
@@ -775,7 +821,11 @@
             getUrl[coverData.source[3]] = () => {
                 const uuid = getBookId(element);
 
-                getUrl.get(`https://bookwalker.jp/de${uuid}`, parseBookPage, coverData.source[3]);
+                if (coverData.cachedUrls[coverData.source[3]] && coverData.cachedUrls[coverData.source[3]][uuid]) {
+                    coverData.cover[id][coverData.source[3]].url = coverData.cachedUrls[coverData.source[3]][uuid];
+                } else {
+                    getUrl.get(`https://bookwalker.jp/de${uuid}`, parseBookPage, coverData.source[3]);
+                }
 
                 function parseBookPage(rspObj) {
                     if (rspObj.status !== 200) {
@@ -1109,7 +1159,7 @@
         }
         function createButton(i, button) {
             button.status = button.text[0];
-            const element = $(`
+            button.element = $(`
                 <${buttonData.tag} id="${button.id}" class="${buttonData.class} bookwalker-cover-downloader">
                     <a class="bookwalker-cover-downloader">
                         <span class="bookwalker-cover-downloader button-text">${button.status}</span>
@@ -1117,8 +1167,8 @@
                     </a>
                 </${buttonData.tag}>
             `)
-            element.on('click', (event) => button.execute($(event.currentTarget)));
-            return element;
+            button.element.on('click', (event) => button.execute($(event.currentTarget)));
+            return button.element;
         }
         function createPageSelect(maxPage) {
             const pageSelectElement = $('#bookwalker-cover-downloader-source-page-select');
@@ -1424,10 +1474,11 @@
                     const lastSelected = coverData.lastSelected;
                     config.downloadSource = selectedUrl;
                     config.downloadPage = selectedPage;
-                    revertCovers();
-                    if (config.downloadOnLoad) downloadAll();
-                    if (selected.length > 0) selected.each((i, element) => selectCover($(element)));
-                    coverData.lastSelected = lastSelected;
+                    revertCovers().then(() => {
+                        if (config.downloadOnLoad) downloadAll();
+                        if (selected.length > 0) selected.each((i, element) => selectCover($(element)));
+                        coverData.lastSelected = lastSelected;
+                    });
                 });
 
                 async function promiseUrls() {
@@ -1474,9 +1525,12 @@
                 }
             }
         }
-        function revertCovers() {
+        async function revertCovers() {
             if (busyDownloading) return false;
             coverData.knownFileName = {};
+            busyDownloading = true;
+            await cacheCoverUrls().catch(displayError);
+            busyDownloading = false;
             coverData.image.each((i, element) => {
                 const id = $(element).attr('id');
 
