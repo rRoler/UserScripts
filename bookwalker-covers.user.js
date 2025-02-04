@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.2.7
+// @version      1.2.8
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -371,9 +371,13 @@
         }
     }
     if (config.bwJpEnableVolumePages && /https:\/\/(?:r18.)?bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
-        bookwalkerCoverDownloaderPageConfig.titleSection = $('.p-main__title').text();
-        bookwalkerCoverDownloaderPageConfig.coverSection = $('.p-main').first();
+        bookwalkerCoverDownloaderPageConfig.titleSection = $('.t-c-product-main-data__title').text();
+        bookwalkerCoverDownloaderPageConfig.coverSection = $('.t-p-detail').first();
         bookwalkerCoverDownloaderPageConfig.singleCover = true;
+        bookwalkerCoverDownloaderPageConfig.imageSelector = $('img.t-o-thumbnail__img');
+        bookwalkerCoverDownloaderPageConfig.dataAttribute = 'data-lazy-src';
+        bookwalkerCoverDownloaderPageConfig.buttonData.class = 'c-o-side-icon-button';
+        bookwalkerCoverDownloaderPageConfig.additionalButtonClasses = 'js-cart-button-add --primary --green';
         return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
     }
     bookwalkerCoverDownloaderPageConfig = {
@@ -416,6 +420,7 @@
        titleSection,
        coverSection,
        buttonData = {tag: '', class: ''},
+       additionalButtonClasses = '',
        css,
        singleCover = false,
        imageSelector = $('img.lazy')
@@ -483,8 +488,8 @@
         coverSection.before(`
             <div id="bookwalker-cover-downloader-main-div" class="bookwalker-cover-downloader">
                 <div id="bookwalker-cover-downloader-source-select" class="bookwalker-cover-downloader">
-                    <select id="bookwalker-cover-downloader-source-url-select" class="${buttonData.class} bookwalker-cover-downloader"></select>
-                    <select id="bookwalker-cover-downloader-source-page-select" class="${buttonData.class} bookwalker-cover-downloader"></select>
+                    <select id="bookwalker-cover-downloader-source-url-select" class="${buttonData.class} ${additionalButtonClasses} bookwalker-cover-downloader"></select>
+                    <select id="bookwalker-cover-downloader-source-page-select" class="${buttonData.class} ${additionalButtonClasses} bookwalker-cover-downloader"></select>
                 </div>
                 <div id="bookwalker-cover-downloader-buttons" class="bookwalker-cover-downloader"></div>
                 <div id="bookwalker-cover-downloader-errors" class="bookwalker-cover-downloader hidden"></div>
@@ -1160,7 +1165,7 @@
         function createButton(i, button) {
             button.status = button.text[0];
             button.element = $(`
-                <${buttonData.tag} id="${button.id}" class="${buttonData.class} bookwalker-cover-downloader">
+                <${buttonData.tag} id="${button.id}" class="${buttonData.class} ${additionalButtonClasses} bookwalker-cover-downloader">
                     <a class="bookwalker-cover-downloader">
                         <span class="bookwalker-cover-downloader button-text">${button.status}</span>
                         <span class="bookwalker-cover-downloader download-progress hidden"></span>
