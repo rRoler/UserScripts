@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.2.8
+// @version      1.3.0
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -27,7 +27,7 @@
 // @run-at       document-end
 // ==/UserScript==
 
-(async function() {
+(function() {
     'use strict';
 
     let config = {};
@@ -271,150 +271,161 @@
             }
         },
         'events': {
-            'init': () => {
-                config = loadConfig();
-                $(document.body).on('click', () => {
-                    if (GM_config.isOpen) GM_config.close();
-                });
-            },
-            'open': () => {
-                $(GM_config.frame).css('border', 'none');
-                $(GM_config.frame).css('border-radius', '8px');
-                $(GM_config.frame).css('box-shadow', '0 0 256px #000');
-            },
-            'close': () => {
-                for (const i in config) {
-                    const newConfig = loadConfig();
-                    if (config[i] !== newConfig[i]) return location.reload();
-                }
-            }
+            'init': onConfigInit,
+            'open': onConfigOpen,
+            'close': onConfigClosed
         }
     }
-    await GM_config.init(bookwalkerConfig);
-    GM_registerMenuCommand('Settings', () => GM_config.open());
 
-    let bookwalkerCoverDownloaderPageConfig = {
-        dataAttribute: 'data-original',
-        titleSection: undefined,
-        coverSection: undefined,
-        buttonData: {
-            tag: 'button',
-            class: 'a-basic-btn--secondary'
-        },
-        css: `
-           a.m-thumb__image.bookwalker-cover-downloader {
-               position: static;
-           }
-           img.bookwalker-cover-downloader.cover-selected {
-               outline: solid #5a8d48 4px !important;
-           }`
-    }
-    if (/https:\/\/(?:r18.)?bookwalker.jp\/series\/.*/.test(window.location.href)) {
-        if (config.bwJpEnableSeriesListPages && /https:\/\/.*\/series\/.*\/list\/.*/.test(window.location.href)) {
-            bookwalkerCoverDownloaderPageConfig.titleSection = $('.o-contents-section__title').text();
-            bookwalkerCoverDownloaderPageConfig.coverSection = $('.o-contents-section__body').first();
-            return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
-        }
-        const wayomiCoverSection = $('#js-episode-list').first();
-        if (config.bwJpEnableSeriesWayomiPages && wayomiCoverSection.length > 0) {
-            wayomiCoverSection.find('.o-ttsk-list-item').each((i, element) => {
-                const links = $(element).find('a');
-                const innerElements = links.children();
-
-                innerElements.find('img.lazy').wrap(`<a data-uuid="${links.attr('data-book-uuid')}"></a>`);
-                links.remove();
-                innerElements.find('.o-ttsk-list-item__right').wrap(links.clone().empty().css('width', '100%'));
-                $(element).append(innerElements);
-            });
-            bookwalkerCoverDownloaderPageConfig.titleSection = $('.o-ttsk-card__title').text();
-            bookwalkerCoverDownloaderPageConfig.coverSection = wayomiCoverSection;
-            bookwalkerCoverDownloaderPageConfig.buttonData.class = 'a-ttsk-btn--primary';
-            bookwalkerCoverDownloaderPageConfig.imageSelector = wayomiCoverSection.find('img.lazy');
-            bookwalkerCoverDownloaderPageConfig.css = `
-               .bookwalker-cover-downloader.a-ttsk-btn--primary {
-                   height: fit-content;
-               }
-               a.bookwalker-cover-downloader {
-                   position: sticky;
-                   margin: 8px;
-               }
-               .bookwalker-cover-downloader.a-ttsk-btn--primary > a.bookwalker-cover-downloader {
-                   position: relative;
-                   margin: unset;
-               }
-               img.bookwalker-cover-downloader {
-                   max-width: 252px;
-                   max-height: 246px;
-               }
-               img.bookwalker-cover-downloader.cover-selected {
-                   outline: solid #00a4e5 4px !important;
-               }
-            `;
-            return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
-        }
-
-        if (config.bwJpRedirectSeriesPages && $(`a[href="${window.location.href}list/"]`).length > 0)
-            return window.location.replace(`${window.location.href}list/`);
-
-        const seriesCoverSection = $('#sec-series').first();
-        if (config.bwJpEnableSeriesPages && seriesCoverSection.length > 0) {
-            seriesCoverSection.find('.bw_box-main.md_box-product').each((i, element) => {
-                const link = $(element).find('.product-hdg').children('a').first();
-
-                $(element).find('img').parent().attr('data-uuid', link.attr('href').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)[0]);
-            });
-            bookwalkerCoverDownloaderPageConfig.dataAttribute = 'src';
-            bookwalkerCoverDownloaderPageConfig.titleSection = $('.overview-hdg-txt').text();
-            bookwalkerCoverDownloaderPageConfig.coverSection = seriesCoverSection;
-            bookwalkerCoverDownloaderPageConfig.imageSelector = seriesCoverSection.find('a > img');
-            return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
-        }
-    }
-    if (config.bwJpEnableVolumePages && /https:\/\/(?:r18.)?bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
-        bookwalkerCoverDownloaderPageConfig.titleSection = $('.t-c-product-main-data__title').text();
-        bookwalkerCoverDownloaderPageConfig.coverSection = $('.t-p-detail').first();
-        bookwalkerCoverDownloaderPageConfig.singleCover = true;
-        bookwalkerCoverDownloaderPageConfig.imageSelector = $('img.t-o-thumbnail__img');
-        bookwalkerCoverDownloaderPageConfig.dataAttribute = 'data-lazy-src';
-        bookwalkerCoverDownloaderPageConfig.buttonData.class = 'c-o-side-icon-button';
-        bookwalkerCoverDownloaderPageConfig.additionalButtonClasses = 'js-cart-button-add --primary --green';
-        return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
-    }
-    bookwalkerCoverDownloaderPageConfig = {
-        dataAttribute: 'data-srcset',
-        titleSection: undefined,
-        coverSection: undefined,
-        buttonData: {
-            tag: 'button',
-            class: 'a-add-all-to-cart-btn'
-        },
-        css: `
-        img.bookwalker-cover-downloader.cover-selected {
-            outline: solid #ff8114 4px !important;
-        }`
-    }
-    if (config.bwGlEnableSeriesPages && /https:\/\/global.bookwalker.jp\/series\/.*/.test(window.location.href)) {
-        bookwalkerCoverDownloaderPageConfig.titleSection = $('.title-main-inner').text().trim();
-        bookwalkerCoverDownloaderPageConfig.coverSection = $('.o-tile-list').first();
-        return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
-    }
-    if (config.bwGlEnableVolumePages && /https:\/\/global.bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
-        bookwalkerCoverDownloaderPageConfig.dataAttribute = 'src';
-        bookwalkerCoverDownloaderPageConfig.titleSection = $('.detail-book-title.clearfix').children('h1').get(0).firstChild.textContent;
-        bookwalkerCoverDownloaderPageConfig.coverSection = $('.wrap.clearfix').first();
-        bookwalkerCoverDownloaderPageConfig.singleCover = true;
-        bookwalkerCoverDownloaderPageConfig.imageSelector = $('.book-img').children('a').children('img');
-        return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
-    }
-    return false;
+    const GM_bookwalkerConfig = new GM_config(bookwalkerConfig);
 
     function loadConfig() {
         const config = {};
         $.each(bookwalkerConfig.fields, (i) => {
-            config[i] = GM_config.get(i);
+            config[i] = GM_bookwalkerConfig.get(i);
         });
         return config;
     }
+    function onConfigInit() {
+        config = loadConfig();
+
+        GM_registerMenuCommand('Settings', () => GM_bookwalkerConfig.open());
+
+        main();
+
+        $(document.body).on('click', () => {
+            if (GM_bookwalkerConfig.isOpen) GM_bookwalkerConfig.close();
+        });
+    }
+    function onConfigOpen() {
+        $(GM_bookwalkerConfig.frame).css('border', 'none');
+        $(GM_bookwalkerConfig.frame).css('border-radius', '8px');
+        $(GM_bookwalkerConfig.frame).css('box-shadow', '0 0 256px #000');
+    }
+    function onConfigClosed() {
+        for (const i in config) {
+            const newConfig = loadConfig();
+            if (config[i] !== newConfig[i]) return location.reload();
+        }
+    }
+
+    function main() {
+        let bookwalkerCoverDownloaderPageConfig = {
+            dataAttribute: 'data-original',
+            titleSection: undefined,
+            coverSection: undefined,
+            buttonData: {
+                tag: 'button',
+                class: 'a-basic-btn--secondary'
+            },
+            css: `
+               a.m-thumb__image.bookwalker-cover-downloader {
+                   position: static;
+               }
+               img.bookwalker-cover-downloader.cover-selected {
+                   outline: solid #5a8d48 4px !important;
+               }`
+        }
+        if (/https:\/\/(?:r18.)?bookwalker.jp\/series\/.*/.test(window.location.href)) {
+            if (config.bwJpEnableSeriesListPages && /https:\/\/.*\/series\/.*\/list\/.*/.test(window.location.href)) {
+                bookwalkerCoverDownloaderPageConfig.titleSection = $('.o-contents-section__title').text();
+                bookwalkerCoverDownloaderPageConfig.coverSection = $('.o-contents-section__body').first();
+                return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+            }
+            const wayomiCoverSection = $('#js-episode-list').first();
+            if (config.bwJpEnableSeriesWayomiPages && wayomiCoverSection.length > 0) {
+                wayomiCoverSection.find('.o-ttsk-list-item').each((i, element) => {
+                    const links = $(element).find('a');
+                    const innerElements = links.children();
+
+                    innerElements.find('img.lazy').wrap(`<a data-uuid="${links.attr('data-book-uuid')}"></a>`);
+                    links.remove();
+                    innerElements.find('.o-ttsk-list-item__right').wrap(links.clone().empty().css('width', '100%'));
+                    $(element).append(innerElements);
+                });
+                bookwalkerCoverDownloaderPageConfig.titleSection = $('.o-ttsk-card__title').text();
+                bookwalkerCoverDownloaderPageConfig.coverSection = wayomiCoverSection;
+                bookwalkerCoverDownloaderPageConfig.buttonData.class = 'a-ttsk-btn--primary';
+                bookwalkerCoverDownloaderPageConfig.imageSelector = wayomiCoverSection.find('img.lazy');
+                bookwalkerCoverDownloaderPageConfig.css = `
+                   .bookwalker-cover-downloader.a-ttsk-btn--primary {
+                       height: fit-content;
+                   }
+                   a.bookwalker-cover-downloader {
+                       position: sticky;
+                       margin: 8px;
+                   }
+                   .bookwalker-cover-downloader.a-ttsk-btn--primary > a.bookwalker-cover-downloader {
+                       position: relative;
+                       margin: unset;
+                   }
+                   img.bookwalker-cover-downloader {
+                       max-width: 252px;
+                       max-height: 246px;
+                   }
+                   img.bookwalker-cover-downloader.cover-selected {
+                       outline: solid #00a4e5 4px !important;
+                   }
+                `;
+                return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+            }
+
+            if (config.bwJpRedirectSeriesPages && $(`a[href="${window.location.href}list/"]`).length > 0)
+                return window.location.replace(`${window.location.href}list/`);
+
+            const seriesCoverSection = $('#sec-series').first();
+            if (config.bwJpEnableSeriesPages && seriesCoverSection.length > 0) {
+                seriesCoverSection.find('.bw_box-main.md_box-product').each((i, element) => {
+                    const link = $(element).find('.product-hdg').children('a').first();
+
+                    $(element).find('img').parent().attr('data-uuid', link.attr('href').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)[0]);
+                });
+                bookwalkerCoverDownloaderPageConfig.dataAttribute = 'src';
+                bookwalkerCoverDownloaderPageConfig.titleSection = $('.overview-hdg-txt').text();
+                bookwalkerCoverDownloaderPageConfig.coverSection = seriesCoverSection;
+                bookwalkerCoverDownloaderPageConfig.imageSelector = seriesCoverSection.find('a > img');
+                return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+            }
+        }
+        if (config.bwJpEnableVolumePages && /https:\/\/(?:r18.)?bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
+            bookwalkerCoverDownloaderPageConfig.titleSection = $('.t-c-product-main-data__title').text();
+            bookwalkerCoverDownloaderPageConfig.coverSection = $('.t-p-detail').first();
+            bookwalkerCoverDownloaderPageConfig.singleCover = true;
+            bookwalkerCoverDownloaderPageConfig.imageSelector = $('img.t-o-thumbnail__img');
+            bookwalkerCoverDownloaderPageConfig.dataAttribute = 'data-lazy-src';
+            bookwalkerCoverDownloaderPageConfig.buttonData.class = 'c-o-side-icon-button';
+            bookwalkerCoverDownloaderPageConfig.additionalButtonClasses = 'js-cart-button-add --primary --green';
+            return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+        }
+        bookwalkerCoverDownloaderPageConfig = {
+            dataAttribute: 'data-srcset',
+            titleSection: undefined,
+            coverSection: undefined,
+            buttonData: {
+                tag: 'button',
+                class: 'a-add-all-to-cart-btn'
+            },
+            css: `
+            img.bookwalker-cover-downloader.cover-selected {
+                outline: solid #ff8114 4px !important;
+            }`
+        }
+        if (config.bwGlEnableSeriesPages && /https:\/\/global.bookwalker.jp\/series\/.*/.test(window.location.href)) {
+            bookwalkerCoverDownloaderPageConfig.titleSection = $('.title-main-inner').text().trim();
+            bookwalkerCoverDownloaderPageConfig.coverSection = $('.o-tile-list').first();
+            return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+        }
+        if (config.bwGlEnableVolumePages && /https:\/\/global.bookwalker.jp\/de[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(window.location.href)) {
+            bookwalkerCoverDownloaderPageConfig.dataAttribute = 'src';
+            bookwalkerCoverDownloaderPageConfig.titleSection = $('.detail-book-title.clearfix').children('h1').get(0).firstChild.textContent;
+            bookwalkerCoverDownloaderPageConfig.coverSection = $('.wrap.clearfix').first();
+            bookwalkerCoverDownloaderPageConfig.singleCover = true;
+            bookwalkerCoverDownloaderPageConfig.imageSelector = $('.book-img').children('a').children('img');
+            return bookwalkerCoverDownloader(bookwalkerCoverDownloaderPageConfig);
+        }
+        return false;
+    }
+
     function bookwalkerCoverDownloader({
        dataAttribute,
        titleSection,
