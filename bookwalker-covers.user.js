@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.3.0
+// @version      1.3.1
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -696,7 +696,7 @@
             if (singleCover)
                 return window.location.href.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)[0];
 
-            const idAttr = $(element).parent().attr('data-uuid');
+            const idAttr = $(element).parent().attr('data-uuid') || $(element).parent().parent().parent().attr('data-book-uuid');
             if (idAttr)
                 return idAttr;
 
