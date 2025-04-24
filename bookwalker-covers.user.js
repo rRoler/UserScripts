@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.3.1
+// @version      1.4.0
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -105,7 +105,7 @@
                 'section': ['Download Settings', ''],
                 'type': 'select',
                 'title': 'The source to download the covers from.\n "Automatic" compares all sources and downloads from the higher quality one.\n "viewer-epubs-trial.bookwalker.jp" won\'t work with a paid or free book unless it has a preview.\n "c.bookwalker.jp (legacy)" won\'t work on newer books.',
-                'options': ['Automatic', 'c.roler.dev', 'viewer-epubs-trial.bookwalker.jp', 'c.bookwalker.jp', 'c.bookwalker.jp (legacy)'],
+                'options': ['Automatic', 'c.roler.dev', 'c.roler.dev (trial pages)', 'viewer-epubs-trial.bookwalker.jp', 'c.bookwalker.jp', 'c.bookwalker.jp (legacy)'],
                 'default': 'Automatic'
             },
             'automaticSourcePriority': {
@@ -114,6 +114,13 @@
                 'title': 'The source that will be prioritized when the download source is set to "Automatic".',
                 'options': ['c.roler.dev', 'c.bookwalker.jp', 'c.bookwalker.jp (legacy)'],
                 'default': 'c.roler.dev'
+            },
+            'automaticPageSourcePriority': {
+                'label': 'Automatic page source priority:',
+                'type': 'select',
+                'title': 'The source that will be prioritized when downloading trial pages and the download source is set to "Automatic".',
+                'options': ['c.roler.dev (trial pages)', 'viewer-epubs-trial.bookwalker.jp'],
+                'default': 'c.roler.dev (trial pages)'
             },
             'downloadPage': {
                 'label': 'Download preview page:',
@@ -452,7 +459,8 @@
             selected: [],
             lastSelected: undefined,
             maxPage: 0,
-            cachedUrls: {}
+            cachedUrls: {},
+            cachedPages: {}
         }
         coverData.selectable = coverData.image.length;
         const checkTimeout = 200;
@@ -530,11 +538,13 @@
 
         busyDownloading = true;
         cacheCoverUrls().then(() => {
-            busyDownloading = false;
-            coverData.image.each(getCoverUrl);
+            cachePages().then(() => {
+                busyDownloading = false;
+                coverData.image.each(getCoverUrl);
 
-            if (singleCover) coverData.image.each((i, element) => selectCover($(element)));
-            else if (config.downloadOnLoad) downloadAll();
+                if (singleCover) coverData.image.each((i, element) => selectCover($(element)));
+                else if (config.downloadOnLoad) downloadAll();
+            }).catch(displayError);
         }).catch(displayError);
 
         function displayError(message) {
@@ -554,6 +564,7 @@
                 [coverData.source[2]]: {},
                 [coverData.source[3]]: {},
                 [coverData.source[4]]: {},
+                [coverData.source[5]]: {},
                 selectable: true,
                 clicked: false,
                 fixStatus: buttonData.other.fixCover.text[0],
@@ -702,10 +713,60 @@
 
             return $(element).parent().parent().parent().children('.a-tile-ttl').children('a').attr('href').split('/')[3].replace(/de/, '');
         }
+        async function cachePages() {
+            if (
+                config.downloadSource !== coverData.source[0]
+                && config.downloadSource !== coverData.source[2]
+                || !$.isEmptyObject(coverData.cachedPages)
+            )
+                return;
+
+            const all_uuids = coverData.image.toArray().map(image => getBookId(image));
+            const uuidsChunkSize = 10;
+            const uuidsChunks = [];
+            for (let i=0; i < all_uuids.length; i += uuidsChunkSize) {
+                uuidsChunks.push(all_uuids.slice(i, i + uuidsChunkSize));
+            }
+
+            const rspObjs = await Promise.all(uuidsChunks.map(async uuids =>
+                await new Promise((resolve) =>
+                    AJAXRequest(
+                        `https://c.roler.dev/bw/pages?ids[]=${uuids.join('&ids[]=')}`,
+                        'text',
+                        resolve,
+                        buttonData.button.setSource.element.children('a').children('.download-progress'),
+                        'Caching pages...',
+                        coverData.source[2]
+                    )
+                )
+            ));
+
+            let rspObjData = [];
+            try {
+                rspObjData = rspObjs.flatMap(rspObj =>
+                    rspObj.status === 200
+                        ? JSON.parse(rspObj.response).data
+                        : []
+                );
+            } catch (e) {
+                return;
+            }
+
+            if (rspObjData.length <= 0)
+                return;
+
+            $.each(rspObjData, (i, data) => {
+                if (!data.uuid || !data.pages) return;
+
+                if ($.isEmptyObject(coverData.cachedPages[coverData.source[2]]))
+                    coverData.cachedPages[coverData.source[2]] = {};
+                coverData.cachedPages[coverData.source[2]][data.uuid] = data.pages;
+            });
+        }
         async function cacheCoverUrls() {
             if (
                 config.downloadSource !== coverData.source[0]
-                && config.downloadSource !== coverData.source[3]
+                && config.downloadSource !== coverData.source[4]
                 || !$.isEmptyObject(coverData.cachedUrls)
             )
                 return;
@@ -718,7 +779,7 @@
                     resolve,
                     buttonData.button.setSource.element.children('a').children('.download-progress'),
                     'Caching cover urls...',
-                    coverData.source[3]
+                    coverData.source[4]
                 )
             );
 
@@ -738,9 +799,9 @@
             $.each(rspObjData.data, (i, data) => {
                 if (!data.uuid || !data.coverImageUrl) return;
 
-                if ($.isEmptyObject(coverData.cachedUrls[coverData.source[3]]))
-                    coverData.cachedUrls[coverData.source[3]] = {};
-                coverData.cachedUrls[coverData.source[3]][data.uuid] = data.coverImageUrl;
+                if ($.isEmptyObject(coverData.cachedUrls[coverData.source[4]]))
+                    coverData.cachedUrls[coverData.source[4]] = {};
+                coverData.cachedUrls[coverData.source[4]][data.uuid] = data.coverImageUrl;
             });
         }
         function getCoverUrl(i, element) {
@@ -755,21 +816,49 @@
                 coverData.cover[id][coverData.source[1]].url = `https://c.roler.dev/bw/${bookId}${config.autoCrop ? '' : '?crop=false'}`;
             }
             getUrl[coverData.source[2]] = () => {
+                const bookId = getBookId(element);
+
+                if (coverData.cachedPages[coverData.source[2]] && coverData.cachedPages[coverData.source[2]][bookId]) {
+                    const pages = coverData.cachedPages[coverData.source[2]][bookId];
+
+                    let maxPageIndex = bookwalkerConfig.fields.downloadPage.max;
+                    if (!pages[maxPageIndex]) {
+                        maxPageIndex = pages.length - 1;
+                        if (maxPageIndex > coverData.maxPage) {
+                            coverData.maxPage = maxPageIndex;
+                            if (config.downloadPage > coverData.maxPage) config.downloadPage = coverData.maxPage;
+                            createPageSelect(coverData.maxPage);
+                        }
+                    }
+
+                    let pageIndex = config.downloadPage;
+                    if (!pages[pageIndex]) pageIndex = maxPageIndex;
+
+                    coverData.cover[id][coverData.source[2]].pageNumber = pageIndex;
+                    coverData.cover[id][coverData.source[2]].width = pages[pageIndex].width;
+                    coverData.cover[id][coverData.source[2]].height = pages[pageIndex].height;
+                    coverData.cover[id][coverData.source[2]].url = pages[pageIndex].url;
+                    coverData.cover[id][coverData.source[2]].filePath = pages[pageIndex].url.replace(/^https?:\/\//, '');
+                } else {
+                    coverData.cover[id][coverData.source[2]].urlStatus = false;
+                }
+            }
+            getUrl[coverData.source[3]] = () => {
                 const uuid = getBookId(element);
 
-                getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${uuid}&BID=0`, getAuthInfo, coverData.source[2]);
+                getUrl.get(`https://viewer-trial.bookwalker.jp/trial-page/c?cid=${uuid}&BID=0`, getAuthInfo, coverData.source[3]);
 
                 function getAuthInfo(rspObj) {
                     let rspObjData;
                     try {
                         rspObjData = JSON.parse(rspObj.response);
                     } catch (e) {
-                        coverData.cover[id][coverData.source[2]].urlStatus = false;
+                        coverData.cover[id][coverData.source[3]].urlStatus = false;
                         return;
                     }
 
                     if (rspObj.status !== 200 || rspObjData.status !== '200') {
-                        coverData.cover[id][coverData.source[2]].urlStatus = false;
+                        coverData.cover[id][coverData.source[3]].urlStatus = false;
                     } else {
                         const book = {
                             url: `${rspObjData.url}${rspObjData.cty === 0 ? 'normal_default/':''}`
@@ -782,19 +871,19 @@
                         }
                         auth.string = `?pfCd=${auth.pfCd}&Policy=${auth.policy}&Signature=${auth.signature}&Key-Pair-Id=${auth.keyPairId}`;
 
-                        getUrl.get(`${book.url}configuration_pack.json${auth.string}`, getMetadata, coverData.source[2]);
+                        getUrl.get(`${book.url}configuration_pack.json${auth.string}`, getMetadata, coverData.source[3]);
 
                         function getMetadata(rspObj) {
                             let rspObjData;
                             try {
                                 rspObjData = JSON.parse(rspObj.response);
                             } catch (e) {
-                                coverData.cover[id][coverData.source[2]].urlStatus = false;
+                                coverData.cover[id][coverData.source[3]].urlStatus = false;
                                 return;
                             }
 
                             if (rspObj.status !== 200) {
-                                coverData.cover[id][coverData.source[2]].urlStatus = false;
+                                coverData.cover[id][coverData.source[3]].urlStatus = false;
                             } else {
                                 book.chapters = rspObjData.configuration.contents;
                                 book.pages = [];
@@ -823,29 +912,29 @@
                                     type: book.pages[pageIndex].chapter.type,
                                     size: book.pages[pageIndex].Size
                                 }
-                                coverData.cover[id][coverData.source[2]].pageNumber = pageIndex;
+                                coverData.cover[id][coverData.source[3]].pageNumber = pageIndex;
                                 page.url = `${book.url}${page.path}/${page.number}.${page.type}${auth.string}`;
-                                coverData.cover[id][coverData.source[2]].filePath = page.path;
-                                coverData.cover[id][coverData.source[2]].width = page.size.Width;
-                                coverData.cover[id][coverData.source[2]].height = page.size.Height;
-                                coverData.cover[id][coverData.source[2]].url = page.url;
+                                coverData.cover[id][coverData.source[3]].filePath = page.path;
+                                coverData.cover[id][coverData.source[3]].width = page.size.Width;
+                                coverData.cover[id][coverData.source[3]].height = page.size.Height;
+                                coverData.cover[id][coverData.source[3]].url = page.url;
                             }
                         }
                     }
                 }
             }
-            getUrl[coverData.source[3]] = () => {
+            getUrl[coverData.source[4]] = () => {
                 const uuid = getBookId(element);
 
-                if (coverData.cachedUrls[coverData.source[3]] && coverData.cachedUrls[coverData.source[3]][uuid]) {
-                    coverData.cover[id][coverData.source[3]].url = coverData.cachedUrls[coverData.source[3]][uuid];
+                if (coverData.cachedUrls[coverData.source[4]] && coverData.cachedUrls[coverData.source[4]][uuid]) {
+                    coverData.cover[id][coverData.source[4]].url = coverData.cachedUrls[coverData.source[4]][uuid];
                 } else {
-                    getUrl.get(`https://bookwalker.jp/de${uuid}`, parseBookPage, coverData.source[3]);
+                    getUrl.get(`https://bookwalker.jp/de${uuid}`, parseBookPage, coverData.source[4]);
                 }
 
                 function parseBookPage(rspObj) {
                     if (rspObj.status !== 200) {
-                        coverData.cover[id][coverData.source[3]].urlStatus = false;
+                        coverData.cover[id][coverData.source[4]].urlStatus = false;
                         return;
                     }
 
@@ -853,24 +942,24 @@
 
                     const twitterImage = bookPage.find('meta[name="twitter:image"]').attr('content');
                     if (!twitterImage) {
-                        coverData.cover[id][coverData.source[3]].urlStatus = false;
+                        coverData.cover[id][coverData.source[4]].urlStatus = false;
                         return;
                     }
 
                     const coverIdMatch = twitterImage.match(/rimg.bookwalker.jp\/([0-9]+|[0-9a-f]{32})\/.*.png/)
                     if (coverIdMatch && coverIdMatch[1])
-                        coverData.cover[id][coverData.source[3]].url = `https://c.bookwalker.jp/coverImage_${coverIdMatch[1]}.${coverData.extension}`;
+                        coverData.cover[id][coverData.source[4]].url = `https://c.bookwalker.jp/coverImage_${coverIdMatch[1]}.${coverData.extension}`;
                     else
-                        coverData.cover[id][coverData.source[3]].urlStatus = false;
+                        coverData.cover[id][coverData.source[4]].urlStatus = false;
                 }
             }
-            getUrl[coverData.source[4]] = () => {
+            getUrl[coverData.source[5]] = () => {
                 const thumbnailId = getThumbnailId(id);
 
                 if (thumbnailId)
-                    coverData.cover[id][coverData.source[4]].url = `https://c.bookwalker.jp/coverImage_${thumbnailId - 1}.${coverData.extension}`;
+                    coverData.cover[id][coverData.source[5]].url = `https://c.bookwalker.jp/coverImage_${thumbnailId - 1}.${coverData.extension}`;
                 else
-                    coverData.cover[id][coverData.source[4]].urlStatus = false;
+                    coverData.cover[id][coverData.source[5]].urlStatus = false;
             }
 
             if (config.downloadSource === coverData.source[0]) {
@@ -922,22 +1011,31 @@
                 }
             }
             getCover[coverData.source[3]] = (rspObj) => {
-                if (rspObj.status !== 200)
+                if (rspObj.status !== 200) {
                     coverData.cover[id][coverData.source[3]].urlStatus = false;
-                else {
-                    const response = new Blob([rspObj.response], {type: 'image/jpeg'});
-                    setImageInfo(coverData.source[3], response, rspObj.finalUrl);
+                } else {
+                    coverData.cover[id][coverData.source[3]].blob = rspObj.response;
+                    coverData.cover[id][coverData.source[3]].url = rspObj.finalUrl;
+                    coverData.cover[id][coverData.source[3]].blobUrl = window.URL.createObjectURL(rspObj.response);
                 }
             }
             getCover[coverData.source[4]] = (rspObj) => {
-                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/i)) {
+                if (rspObj.status !== 200)
                     coverData.cover[id][coverData.source[4]].urlStatus = false;
+                else {
+                    const response = new Blob([rspObj.response], {type: 'image/jpeg'});
+                    setImageInfo(coverData.source[4], response, rspObj.finalUrl);
+                }
+            }
+            getCover[coverData.source[5]] = (rspObj) => {
+                if (rspObj.status !== 200 && rspObj.status !== 403 || rspObj.status === 403 && retry403.count >= retry403.max || !rspObj.finalUrl.indexOf(/https:\/\/c.bookwalker.jp\/coverImage_.[0-9]*.jpg/i)) {
+                    coverData.cover[id][coverData.source[5]].urlStatus = false;
                 } else if (rspObj.status === 403 && retry403.count < retry403.max) {
-                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`, getCover[coverData.source[4]], coverData.source[4]);
+                    getCover.get(`https://c.bookwalker.jp/coverImage_${(parseInt(rspObj.finalUrl.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`, getCover[coverData.source[5]], coverData.source[5]);
                     ++retry403.count;
                 } else {
                     const response = new Blob([rspObj.response], {type: 'image/jpeg'});
-                    setImageInfo(coverData.source[4], response, rspObj.finalUrl);
+                    setImageInfo(coverData.source[5], response, rspObj.finalUrl);
                 }
             }
 
@@ -946,40 +1044,55 @@
                 let source2 = coverData.source[2];
                 let source3 = coverData.source[3];
                 let source4 = coverData.source[4];
+                let source5 = coverData.source[5];
 
                 switch (config.automaticSourcePriority) {
-                    case coverData.source[3]:
-                        source1 = coverData.source[3];
-                        source3 = coverData.source[4];
-                        source4 = coverData.source[1];
-                        break;
                     case coverData.source[4]:
                         source1 = coverData.source[4];
-                        source3 = coverData.source[1];
-                        source4 = coverData.source[3];
+                        source4 = coverData.source[5];
+                        source5 = coverData.source[1];
+                        break;
+                    case coverData.source[5]:
+                        source1 = coverData.source[5];
+                        source4 = coverData.source[1];
+                        source5 = coverData.source[4];
                         break;
                 }
 
-                if (config.downloadPage > 0) return download(source2);
+                switch (config.automaticPageSourcePriority) {
+                    case coverData.source[3]:
+                        source2 = coverData.source[3];
+                        source3 = coverData.source[2];
+                        break;
+                }
+
+                if (config.downloadPage > 0)
+                    return promiseUrl(source2, 'url').then((source2Url) => {
+                        if (!source2Url) return download(source3);
+                        download(source2);
+                    });
 
                 promiseUrl(source2, 'url').then((source2Url) =>
                     download(source1, (source, source1Url) => {
                         if (!source2Url) {
-                            if (!source1Url) return download(source3, (source, source3Url) => {
-                                if (!source3Url) return download(source4);
-                                setCover(source3, coverData.cover[id][source3].urlStatus);
+                            if (!source1Url) return download(source4, (source, source4Url) => {
+                                if (!source4Url) return download(source5);
+                                setCover(source4, coverData.cover[id][source4].urlStatus);
                             });
                             return setCover(source1, coverData.cover[id][source1].urlStatus);
                         }
                         if (!source1Url)
-                            return download(source3, (source, source3Url) => {
-                                if (!source3Url) return download(source4, (source, source4Url) => {
-                                    if (!source4Url) return download(source2);
-                                    compareImages(source4, source2);
+                            return download(source4, (source, source4Url) => {
+                                if (!source4Url) return download(source5, (source, source5Url) => {
+                                    if (!source5Url) return download(source2, (source, source2Url) => {
+                                        if (!source2Url) return download(source3);
+                                        setCover(source2, coverData.cover[id][source2].urlStatus);
+                                    });
+                                    compareImages(source5, source2, source3);
                                 });
-                                compareImages(source3, source2);
+                                compareImages(source4, source2, source3);
                             });
-                        compareImages(source1, source2);
+                        compareImages(source1, source2, source3);
                     })
                 );
             } else {
@@ -996,7 +1109,7 @@
                     }
                 });
             }
-            function compareImages(source1, source2) {
+            function compareImages(source1, source2, source3) {
                 if (coverData.cover[id][source1].width * coverData.cover[id][source1].height >= coverData.cover[id][source2].width * coverData.cover[id][source2].height) {
                     if (
                         config.autoCrop &&
@@ -1005,16 +1118,23 @@
                         && coverData.cover[id][source2].height === 1200
                         && coverData.cover[id][source1].width <= 964
                         && coverData.cover[id][source2].width <= 844
-                    ) download(source2);
-                    else setCover(source1, coverData.cover[id][source1].urlStatus);
-                } else download(source2);
+                    ) {
+                        download(source2, (source, source2Url) => {
+                            if (!source2Url) return download(source3);
+                            setCover(source2, coverData.cover[id][source2].urlStatus);
+                        });
+                    } else setCover(source1, coverData.cover[id][source1].urlStatus);
+                } else download(source2, (source, source2Url) => {
+                    if (!source2Url) return download(source3);
+                    setCover(source2, coverData.cover[id][source2].urlStatus);
+                })
             }
             function setImageInfo(source, response, url) {
                 const blobUrl = window.URL.createObjectURL(response);
                 const image = new Image;
                 image.src = blobUrl;
                 image.onload = () => {
-                    const filePath = url.replace(/https:\/\//, '');
+                    const filePath = url.replace(/^https?:\/\//, '');
 
                     coverData.cover[id][source].blob = response;
                     coverData.cover[id][source].filePath = filePath;
@@ -1095,10 +1215,10 @@
             }
             if (
                 config.showTryToFix && config.downloadSource === coverData.source[0] && config.downloadPage <= 0
-                || config.showTryToFix && config.downloadSource === coverData.source[4]
+                || config.showTryToFix && config.downloadSource === coverData.source[5]
                 || revert
             ) {
-                if (coverData.cover[id][coverData.source[4]].url || revert) {
+                if (coverData.cover[id][coverData.source[5]].url || revert) {
                     const fixElement = element.parent().children('.cover-fix');
 
                     fixElement[hideClass]('hidden');
@@ -1145,7 +1265,7 @@
             }
 
             function fix(revert) {
-                coverData.cover[imgElementId][coverData.source[4]].urlStatus = true;
+                coverData.cover[imgElementId][coverData.source[5]].urlStatus = true;
                 if (!coverData.cover[imgElementId].selectable) {
                     coverData.cover[imgElementId].selectable = true;
                     ++coverData.selectable;
@@ -1153,15 +1273,15 @@
                 URL.revokeObjectURL(coverData.cover[imgElementId].blob.url);
                 delete coverData.cover[imgElementId].blob.url;
                 delete coverData.cover[imgElementId].blob.blob;
-                delete coverData.cover[imgElementId][coverData.source[4]].blobUrl;
-                delete coverData.cover[imgElementId][coverData.source[4]].blob;
+                delete coverData.cover[imgElementId][coverData.source[5]].blobUrl;
+                delete coverData.cover[imgElementId][coverData.source[5]].blob;
 
                 if (revert) {
-                    coverData.cover[imgElementId][coverData.source[4]].url = coverData.cover[imgElementId][coverData.source[4]].oldUrl;
+                    coverData.cover[imgElementId][coverData.source[5]].url = coverData.cover[imgElementId][coverData.source[5]].oldUrl;
                     coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[3];
                 } else {
-                    coverData.cover[imgElementId][coverData.source[4]].oldUrl = coverData.cover[imgElementId][coverData.source[4]].url;
-                    coverData.cover[imgElementId][coverData.source[4]].url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[imgElementId][coverData.source[4]].url.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`;
+                    coverData.cover[imgElementId][coverData.source[5]].oldUrl = coverData.cover[imgElementId][coverData.source[5]].url;
+                    coverData.cover[imgElementId][coverData.source[5]].url = `https://c.bookwalker.jp/coverImage_${(parseInt(coverData.cover[imgElementId][coverData.source[5]].url.replace(thumbnailIdRegex, '')) - 1)}.${coverData.extension}`;
                     coverData.cover[imgElementId].fixStatus = buttonData.other.fixCover.text[2];
                 }
                 currentElement.text(coverData.cover[imgElementId].fixStatus);
@@ -1381,7 +1501,7 @@
                     id: id,
                     string: config.clipboardMask,
                     filterName: false,
-                    coverUrl: coverData.cover[id].blob.source === coverData.source[2] ? await blobToDataURL(coverData.cover[id].blob.blob) : coverData.cover[id].blob.coverUrl
+                    coverUrl: coverData.cover[id].blob.source === coverData.source[3] ? await blobToDataURL(coverData.cover[id].blob.blob) : coverData.cover[id].blob.coverUrl
                 });
             }
             await GM_setClipboard(links);
@@ -1483,6 +1603,7 @@
                 selectedUrl !== config.downloadSource
                 || config.downloadSource === coverData.source[0] && selectedPage !== config.downloadPage
                 || config.downloadSource === coverData.source[2] && selectedPage !== config.downloadPage
+                || config.downloadSource === coverData.source[3] && selectedPage !== config.downloadPage
             ) {
                 promiseUrls().then(() => {
                     busyDownloading = false;
@@ -1546,6 +1667,7 @@
             coverData.knownFileName = {};
             busyDownloading = true;
             await cacheCoverUrls().catch(displayError);
+            await cachePages().catch(displayError);
             busyDownloading = false;
             coverData.image.each((i, element) => {
                 const id = $(element).attr('id');
