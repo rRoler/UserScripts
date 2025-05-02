@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.4.0
+// @version      1.4.1
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -1373,23 +1373,10 @@
             return await new Promise((resolve, reject) => {
                 busyDownloading = true;
 
-                if (coverData.selected.length > config.saveAsJPEGConfirm && config.saveAsJPEGConfirm > 0) {
-                    if (confirm(`You are about to save more than ${config.saveAsJPEGConfirm} covers!`)) {
-                        coverData.selected.each(save);
-                    } else {
-                        return resolve(false);
-                    }
-                } else {
-                    coverData.selected.each(save);
-                }
-
                 let saved = 0;
-                function save(i, element) {
+                async function save(i, element) {
                     const id = $(element).attr('id');
                     const saveFileName = getFileName({id: id});
-
-                    displayProgress($(element).parent().children('.download-progress'), 0, 'Saving Cover...');
-                    readyToDownload().then(download);
 
                     function download() {
                         if (config.imageSaveLocationCheck) {
@@ -1422,6 +1409,7 @@
                         } else {
                             handleError();
                         }
+
                         function handleError() {
                             --concurrentDownloads.count;
                             try {
@@ -1436,6 +1424,26 @@
                             }
                         }
                     }
+
+                    displayProgress($(element).parent().children('.download-progress'), 0, 'Saving Cover...');
+                    await readyToDownload().then(download);
+                }
+
+                async function saveSelected() {
+                    for (const [i, element] of coverData.selected.toArray().entries()) {
+                        await save(i, element);
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+                }
+
+                if (coverData.selected.length > config.saveAsJPEGConfirm && config.saveAsJPEGConfirm > 0) {
+                    if (confirm(`You are about to save more than ${config.saveAsJPEGConfirm} covers!`)) {
+                        saveSelected();
+                    } else {
+                        return resolve(false);
+                    }
+                } else {
+                    saveSelected();
                 }
             });
         }
