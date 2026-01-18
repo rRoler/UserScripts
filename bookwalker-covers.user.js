@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BookWalker Cover Downloader
 // @namespace    https://github.com/rRoler/UserScripts
-// @version      1.4.1
+// @version      1.4.2
 // @description  Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 // @author       Roler
 // @match        https://bookwalker.jp/*
@@ -29,6 +29,18 @@
 
 (function() {
     'use strict';
+
+    const deprecationKey = 'deprecation-acknowledged';
+    const isDeprecationAcknowledged = GM_getValue(deprecationKey, false);
+    if (!isDeprecationAcknowledged) {
+        const message = "⚠️ Userscript Deprecation Notice!\n\n" +
+            "The BookWalker Cover Downloader userscript is no longer maintained and will not receive updates.\n\n" +
+            "It's recommended to use the new web tool instead:\n" +
+            "https://covers.roler.dev\n\n" +
+            "Click OK to open the new site, or Cancel to dismiss this message permanently.";
+        if (confirm(message)) window.open("https://covers.roler.dev", "_blank");
+        GM_setValue(deprecationKey, true);
+    }
 
     let config = {};
     const configId = 'bookwalker-cover-downloader-config';

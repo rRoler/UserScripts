@@ -6,10 +6,22 @@
 
 ***
 
+> [!CAUTION]
+> **DEPRECATED**<br>
+> This script is no longer maintained and will not receive updates.
+> <br>
+> Please use the web tool at [covers.roler.dev](https://covers.roler.dev) instead.
+
 > ## BookWalker Cover Downloader<br>
 > Select and download covers on BookWalker Japan/Global series list, series, Wayomi and volume/book pages.
 > <br><br>
 > [![Install UserScript]](https://github.com/rRoler/UserScripts/raw/master/bookwalker-covers.user.js)
+
+---
+
+> [!CAUTION]
+> **DEPRECATED**<br>
+> This script is no longer maintained and will not receive updates.
 
 > ## MangaDex Customizer<br>
 > Customize MangaDex title pages by adding custom alt titles, changing the main title and cover, and adding custom tags\links.<br>
@@ -19,4 +31,4 @@
 
 ***
 
-[Bookmarklets](https://bookmarklets.roler.dev)
+[Big Book Covers](https://covers.roler.dev) | [Bookmarklets](https://bookmarklets.roler.dev)
